@@ -7,7 +7,7 @@ import os
 
 # --- 1. إعدادات الصفحة بدون شريط جانبي ---
 st.set_page_config(
-    page_title="محلل أسهم الشريعة - EGX33",
+    page_title="محلل أسهم الشريعة الإسلامية - البورصة المصرية",
     page_icon="🟢",
     layout="wide",
     initial_sidebar_state="collapsed"
@@ -24,7 +24,6 @@ st.markdown("""
         text-align: right;
     }
     
-    /* إخفاء خيار فتح الشريط الجانبي تماماً */
     [data-testid="collapsedControl"] {
         display: none !important;
     }
@@ -35,7 +34,6 @@ st.markdown("""
         color: #1e293b;
     }
 
-    /* كروت الأسهم */
     .stock-card {
         background-color: #ffffff;
         border: 1px solid #e2e8f0;
@@ -60,7 +58,6 @@ st.markdown("""
     .price-up { color: #16a34a; font-weight: bold; }
     .price-down { color: #dc2626; font-weight: bold; }
 
-    /* كروت التوصيات والفرص المحسنة */
     .opp-card {
         background-color: #ffffff;
         border-right: 5px solid #2563eb;
@@ -125,56 +122,131 @@ def get_gemini_model():
             continue
     return genai.GenerativeModel('gemini-1.5-flash')
 
-# --- 4. مكونات مؤشر الشريعة الإسلامية بالبورصة المصرية (EGX33) ---
+# --- 4. قائمة الأسهم المتوافقة مع الشريعة المحدثة بالكامل من الصور (91 سهم) ---
 SHARIAH_STOCKS = {
-    # قطاع البتروكيماويات والكيماويات والأسمدة
-    "أبو قير للأسمدة": "ABUK.CA",
-    "مصر لإنتاج الأسمدة (موبكو)": "MFPC.CA",
-    "سيدي كرير للبتروكيماويات": "SKPC.CA",
-    "أموك - الإسكندرية للزيوت": "AMOC.CA",
-    "كفر الزيات للمبيدات": "KZPC.CA",
-    "المالية والصناعية المصرية": "EFIC.CA",
-    
-    # قطاع العقارات والخدمات الإنشائية
-    "مجموعة طلعت مصطفى": "TMGH.CA",
-    "إعمار مصر للتنمية": "EMFD.CA",
-    "مدينة مصر للإسكان": "MASR.CA",
-    "أوراسكوم للتنمية مصر": "ORHD.CA",
-    "مصر الجديدة للإسكان": "HELI.CA",
-    "زهراء المعادي للاستثمار": "ZMID.CA",
-    "أوراسكوم للإنشاءات": "ORAS.CA",
-
-    # قطاع الخدمات المالية والبنكية المتوافقة
-    "مصرف أبوظبي الإسلامي": "ADIB.CA",
-    "بنك البركة مصر": "SAUD.CA",
-    "فوري لتكنولوجيا البنوك": "FWRY.CA",
-    "إي فاينانس للاستثمارات": "EFIH.CA",
-    "بلتون المالية القابضة": "BTFH.CA",
-    "سي آي كابيتال القابضة": "CICH.CA",
-
-    # قطاع الصناعة والمواد الأساسية
-    "السويدي إلكتريك": "SWDY.CA",
-    "حديد عز": "ESRS.CA",
+    "العامة لاستصلاح الاراضي": "AALR.CA",
+    "الشركة العربية لادارة وتطوير الأصول": "ACAMD.CA",
+    "مصرف أبو ظبي الإسلامي - مصر": "ADIB.CA",
+    "اراب للتنمية والاستثمار العقاري": "ADRI.CA",
+    "مطاحن ومخابز الاسكندرية": "AFMC.CA",
+    "اطلس للاستثمار والصناعات الغذائية": "AIFI.CA",
+    "اجواء للصناعات الغذائية - مصر": "AJWA.CA",
+    "الاسكندرية للخدمات الطبية": "AMES.CA",
+    "الاسكندرية للزيوت المعدنية (أموك)": "AMOC.CA",
+    "نوفيدا للاستثمار والتكنولوجيا": "AMPI.CA",
+    "العبوات الدوائية المتطورة": "APPC.CA",
+    "العربيه وبولفارا للغزل والنسيج": "APSW.CA",
+    "العربية للأسمنت": "ARCC.CA",
+    "التوفيق للتأجير التمويلي - أية.تي.ليس": "ATLC.CA",
+    "مصر الوطنية للصلب - عتاقة": "ATQA.CA",
+    "الاسكندرية للأدوية والصناعات الكيماوية": "AXPH.CA",
+    "بي اي دي - البدر للاستثمار والتنمية": "BIDI.CA",
+    "بي اي جي للتجارة والاستثمار": "BIGP.CA",
+    "جلاكسو سميث كلاين": "BIOC.CA",
+    "القاهرة للخدمات التعليمية": "CAED.CA",
+    "شركة مستشفي كليوباترا": "CLHO.CA",
+    "كوبر للاستثمار التجاري والتطوير العقاري": "COPR.CA",
+    "القاهرة للزيوت والصابون": "COSG.CA",
+    "شركة القاهرة للأدوية": "CPCI.CA",
+    "كريستمارك للمقاولات والتطوير العقاري": "CRST.CA",
+    "ديجيتايز للاستثمار والتقنية": "DGTZ.CA",
+    "العربية لاستصلاح الاراضي": "EALR.CA",
+    "مطاحن شرق الدلتا": "EDFM.CA",
+    "ايديتا للصناعات الغذائية": "EFID.CA",
     "مصر للألومنيوم": "EGAL.CA",
-
-    # قطاع الأغذية والمشروبات والسلع الاستهلاكية
+    "غاز مصر": "EGAS.CA",
+    "المصريين للاسكان والتنمية والتعمير": "EHDR.CA",
+    "المصرية للمشروعات السياحية العالمية": "EITP.CA",
+    "النصر لتصنيع الحاصلات الزراعية": "ELNA.CA",
+    "بنك فيصل الاسلامي المصري - بالدولار": "FAITA.CA",
+    "فيوتشر كير للصناعات الطبية": "FCMD.CA",
+    "الاولى للاستثمار والتنمية العقارية": "FIRE.CA",
+    "الفنار للمقاولات العمومية والإنشاءات": "FNAR.CA",
+    "الغربية الإسلامية للتنمية العمرانية": "GIHD.CA",
+    "مجموعة جي . أم . سي للاستثمارات": "GMCI.CA",
+    "جي بي أي للنمو العمراني": "GPIM.CA",
+    "جلوبال تيلكوم القابضة": "GTHE.CA",
+    "الدولية للأسمدة والكيماويات": "ICFC.CA",
+    "المشروعات الصناعية والهندسية": "IEEC.CA",
+    "الدوليه للمحاصيل الزراعيه": "IFAP.CA",
+    "المجموعة المتكاملة للأعمال الهندسية": "INEG.CA",
+    "فوديكو - الاسماعيلية الوطنية للصناعات الغذائية": "INFI.CA",
+    "الاسماعيلية مصر للدواجن": "ISMA.CA",
+    "الحديد والصلب للمناجم والمحاجر": "ISMQ.CA",
     "جهينة للصناعات الغذائية": "JUFO.CA",
-    "النساجون الشرقيون": "ORWE.CA",
-    "عبور لاند للصناعات الغذائية": "OLFI.CA",
-
-    # قطاع الرعاية الصحية والأدوية
-    "ابن سينا فارما": "ISPH.CA",
-    "العاشر من رمضان (راميدا)": "RMDA.CA",
-    "مستشفى كيلوباترا": "CLHO.CA",
+    "النصر للملابس والمنسوجات - كابو": "KABO.CA",
+    "مصر بنى سويف للاسمنت": "MBSC.CA",
+    "مصر للاسمنت - قنا": "MCQE.CA",
+    "ماكرو جروب": "MCRO.CA",
+    "مصر لإنتاج الأسمدة - موبكو": "MFPC.CA",
+    "مصر لصناعة الكيماويات": "MICH.CA",
+    "مطاحن ومخابز شمال القاهرة": "MILS.CA",
+    "مصر انتركونتننتال لصناعة الجرانيت": "MISR.CA",
+    "المصرية الكويتية للاستثمار والتجارة": "MKIT.CA",
+    "مرسى مرسى علم للتنمية السياحية": "MMAT.CA",
+    "المصرية لنظم التعليم الحديثة": "MOED.CA",
+    "مصر للزيوت والصابون": "MOSC.CA",
+    "ممفيس للادوية والصناعات الكيماوية": "MPCI.CA",
+    "المنصورة للدواجن": "MPCO.CA",
+    "ام.ام جروب للصناعة والتجارة العالمية": "MTIE.CA",
+    "النصر للأعمال المدنية": "NCCW.CA",
+    "النيل لحليج الاقطان": "NCGC.CA",
+    "شمال الصعيد للتنمية والانتاج الزراعي": "NEDA.CA",
+    "مستشفى النزهة الدولي": "NINH.CA",
+    "شركة العبور للإستثمار العقارى": "OBRI.CA",
+    "اكتوبر فارما": "OCPH.CA",
+    "البويات والصناعات الكيماوية - باكين": "PACH.CA",
+    "بريميم هيلثكير جروب": "PHGC.CA",
+    "القاهرة للدواجن": "POUL.CA",
+    "الشركة العامة لمنتجات السيراميك والصيني": "PRCL.CA",
+    "الاستثمار العقاري العربي - اليكو": "RREI.CA",
+    "روبكس العالميه لتصنيع البلاستيك": "RUBX.CA",
+    "بنك البركة مصر": "SAUD.CA",
+    "اسمنت سيناء": "SCEM.CA",
+    "مطاحن ومخابز جنوب القاهرة والجيزة": "SCFM.CA",
+    "سبأ الدولية للأدوية والصناعات الكيماوية": "SIPC.CA",
+    "سيدى كرير للبتروكيماويات": "SKPC.CA",
+    "سماد مصر (ايجيفرت)": "SMFR.CA",
+    "الاسكندرية للغزل والنسيج (سبينالكس)": "SPIN.CA",
     "سبيد ميديكال": "SPMD.CA",
-
-    # قطاع السيارات والخدمات اللوجستية
-    "جي بي كورب (غبور)": "AUTO.CA",
-    "القناة للتوكيلات الملاحية": "CSAG.CA"
+    "تنمية للاستثمار العقاري": "TANM.CA",
+    "مطاحن مصر العليا": "UEFM.CA",
+    "الاتحاد الصيدلي للخدمات الطبية والاستثمار": "UPMS.CA",
+    "فرتيكا للصناعة والتجارة": "VERT.CA",
+    "وادي كوم امبو لاستصلاح الاراضي": "WKOL.CA",
+    "الزيوت المستخلصة ومنتجاتها": "ZEOT.CA"
 }
 
-# --- 5. جلب الأسعار اللحظية ---
-@st.cache_data(ttl=300)
+# --- دالة حساب المؤشرات الفنية المتقدمة الاحترافية ---
+def calculate_technical_indicators(df):
+    if len(df) < 14:
+        return df
+    
+    # 1. مؤشر القوة النسبية (RSI 14)
+    delta = df['Close'].diff()
+    gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
+    loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
+    rs = gain / loss
+    df['RSI'] = 100 - (100 / (1 + rs))
+
+    # 2. المتوسطات المتحركة (SMA 20 & SMA 50)
+    df['SMA_20'] = df['Close'].rolling(window=20).mean()
+    df['SMA_50'] = df['Close'].rolling(window=50).mean()
+
+    # 3. مؤشر MACD
+    exp1 = df['Close'].ewm(span=12, adjust=False).mean()
+    exp2 = df['Close'].ewm(span=26, adjust=False).mean()
+    df['MACD'] = exp1 - exp2
+    df['Signal_Line'] = df['MACD'].ewm(span=9, adjust=False).mean()
+
+    # 4. نسبة تغير حجم التداول مقارنة بمتوسط 10 أيام
+    df['Vol_Avg_10'] = df['Volume'].rolling(window=10).mean()
+    df['Vol_Ratio'] = df['Volume'] / df['Vol_Avg_10']
+
+    return df
+
+# --- 5. جلب الأسعار اللحظية مع التحليل الفني ---
+@st.cache_data(ttl=180)  # تحديث البيانات كل 3 دقائق
 def fetch_stocks_data():
     results = []
     tickers = list(SHARIAH_STOCKS.values())
@@ -183,25 +255,41 @@ def fetch_stocks_data():
         for name, symbol in SHARIAH_STOCKS.items():
             try:
                 t = data.tickers[symbol]
-                hist = t.history(period="5d")
+                hist = t.history(period="3m") # فترة 3 شهور كافية لحساب المؤشرات الاحترافية
+                
                 if not hist.empty and len(hist) >= 2:
-                    current = hist['Close'].iloc[-1]
-                    prev = hist['Close'].iloc[-2]
-                    change = current - prev
-                    pct_change = (change / prev) * 100
-                    high = hist['High'].max()
-                    low = hist['Low'].min()
+                    hist = calculate_technical_indicators(hist)
+                    latest = hist.iloc[-1]
+                    prev = hist.iloc[-2]
+                    
+                    current = latest['Close']
+                    change = current - prev['Close']
+                    pct_change = (change / prev['Close']) * 100
+                    high = latest['High']
+                    low = latest['Low']
+                    
+                    # مؤشرات فنية
+                    rsi = latest['RSI'] if 'RSI' in latest and not pd.isna(latest['RSI']) else 50
+                    macd = latest['MACD'] if 'MACD' in latest and not pd.isna(latest['MACD']) else 0
+                    signal = latest['Signal_Line'] if 'Signal_Line' in latest and not pd.isna(latest['Signal_Line']) else 0
+                    sma_20 = latest['SMA_20'] if 'SMA_20' in latest and not pd.isna(latest['SMA_20']) else current
+                    vol_ratio = latest['Vol_Ratio'] if 'Vol_Ratio' in latest and not pd.isna(latest['Vol_Ratio']) else 1.0
                 else:
-                    current, change, pct_change, high, low = 0, 0, 0, 0, 0
+                    current, change, pct_change, high, low, rsi, macd, signal, sma_20, vol_ratio = 0, 0, 0, 0, 0, 50, 0, 0, 0, 1.0
                 
                 results.append({
                     "name": name,
-                    "symbol": symbol,
+                    "symbol": symbol.replace(".CA", ""),
                     "price": current,
                     "change": change,
                     "pct_change": pct_change,
                     "high": high,
-                    "low": low
+                    "low": low,
+                    "rsi": rsi,
+                    "macd": macd,
+                    "signal": signal,
+                    "sma_20": sma_20,
+                    "vol_ratio": vol_ratio
                 })
             except Exception:
                 continue
@@ -209,7 +297,7 @@ def fetch_stocks_data():
         st.error(f"خطأ أثناء جلب البيانات: {e}")
     return pd.DataFrame(results)
 
-# --- 6. تحليل الفرص بالذكاء الاصطناعي ---
+# --- 6. تحليل الفرص بالذكاء الاصطناعي بنمط مدير محافظ محترف ---
 def generate_ai_opportunities(df_stocks):
     model = get_gemini_model()
     
@@ -218,16 +306,22 @@ def generate_ai_opportunities(df_stocks):
     stocks_summary = []
     for _, row in active_stocks.iterrows():
         stocks_summary.append(
-            f"- {row['name']} ({row['symbol']}): السعر {row['price']:.2f} EGP، التغير {row['pct_change']:.2f}%، أعلى {row['high']:.2f}، أدنى {row['low']:.2f}"
+            f"- {row['name']} ({row['symbol']}): السعر {row['price']:.2f} EGP | التغير {row['pct_change']:.2f}% | RSI {row['rsi']:.1f} | MACD {row['macd']:.2f} (Signal {row['signal']:.2f}) | SMA20 {row['sma_20']:.2f} | نسبة حجم التداول {row['vol_ratio']:.2f}x"
         )
     
     prompt = f"""
-    أنت مستشار مالي ومحلل فني محترف في البورصة المصرية (EGX).
-    بناءً على بيانات أسهم مؤشر الشريعة الإسلامية التالية:
+    أنت مدير محافظ مالية ومحلل تقني خبير متخصص في البورصة المصرية (EGX).
+    قم بتحليل بيانات أسهم الشريعة الإسلامية التالية المرفقة ببيانات المؤشرات الفنية الاحترافية (RSI, MACD, Volume Ratio, SMA20):
     
     {chr(10).join(stocks_summary)}
     
-    حدد أفضل 4 إلى 5 فرص استثمارية حالية من بين هذه الأسهم.
+    المطلوب:
+    قم بفرز وتقييم الأسهم بناءً على معايير التحليل الفني للمحترفين:
+    1. الأسهم في مناطق تجميع أو اختراق لمستويات المقاومة مع دعم من حجم التداول (Volume Ratio > 1.2).
+    2. مؤشر القوة النسبية RSI يظهر عدم وجود تشبع شرائي زائد (أفضل نطاق بين 40 و 65).
+    3. إشارات تقاطع إيجابي في مؤشر MACD فوق خط الإشارة.
+    
+    اختر أفضل 4 إلى 5 فرص استثمارية فقط.
     أرجع النتيجة حتمياً بصيغة JSON فقط كقائمة بالشكل التالي دون أي مقدمات أو علامات markdown زائدة:
     [
       {{
@@ -236,7 +330,7 @@ def generate_ai_opportunities(df_stocks):
         "سعر الشراء": "35.50",
         "السعر المستهدف": "42.00",
         "وقف الخسارة": "33.00",
-        "أسباب التحليل": "شرح فني وأساسي مختصر لسبب الاختيار"
+        "أسباب التحليل": "شرح فني محترف يشمل إشارات RSI والزخم ومستويات الدعم/المقاومة الأحدث وحجم التداول"
       }}
     ]
     """
@@ -260,27 +354,27 @@ def generate_ai_opportunities(df_stocks):
                 "سعر الشراء": f"{row['price']:.2f}",
                 "السعر المستهدف": f"{(row['price'] * 1.12):.2f}",
                 "وقف الخسارة": f"{(row['price'] * 0.94):.2f}",
-                "أسباب التحليل": "زخم إيجابي واختراق مستويات مقاومة هامة مع حجم تداول مستقر."
+                "أسباب التحليل": "اختراق مستوى المتوسط المتحرك 20 يوماً مع زخم إيجابي على مؤشر RSI وزيادة في أحجام التداول."
             })
         return opportunities
 
 # --- 7. الواجهة الرئيسية ---
-st.markdown('<h1 class="main-header">📈 أسهم الشريعة (EGX33) - البورصة المصرية</h1>', unsafe_allow_html=True)
+st.markdown('<h1 class="main-header">📈 أسهم الشريعة الإسلامية - البورصة المصرية</h1>', unsafe_allow_html=True)
 
 col_info, col_btn = st.columns([3, 1])
 with col_info:
-    st.write("أسعار لحظية وتحليل ذكي لأفضل الفرص الاستثمارية لمكونات مؤشر الشريعة.")
+    st.write("أسعار لحظية وتحليل ذكي لأفضل الفرص الاستثمارية في الأسهم المتوافقة مع الشريعة الإسلامية.")
 with col_btn:
     if st.button("🔄 تحديث البيانات", use_container_width=True):
         st.cache_data.clear()
         st.rerun()
 
 # جلب البيانات
-with st.spinner("جاري جلب الأسعار اللحظية..."):
+with st.spinner("جاري جلب الأسعار اللحظية وتحليل المؤشرات الفنية..."):
     df_stocks = fetch_stocks_data()
 
 # 1. قائمة الأسهم المحدثة + شريط البحث
-st.subheader("📋 قائمة أسهم مؤشر الشريعة")
+st.subheader("📋 قائمة الأسهم المتوافقة مع الشريعة")
 
 search_term = st.text_input("🔍 البحث باسم السهم أو الكود:", "")
 
@@ -314,7 +408,7 @@ else:
 
 st.markdown("---")
 
-# 2. عرض كروت الفرص الاستثمارية المصممة باحترافية
+# 2. عرض كروت الفرص الاستثمارية
 st.subheader("🌟 أفضل الفرص الاستثمارية الموصى بها")
 
 if not df_stocks.empty:
@@ -351,4 +445,4 @@ if not df_stocks.empty:
                 </div>
             </div>
             """, unsafe_allow_html=True)
-                                   
+                
