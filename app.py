@@ -122,7 +122,7 @@ def get_gemini_model():
             continue
     return genai.GenerativeModel('gemini-1.5-flash')
 
-# --- 4. قائمة الأسهم المتوافقة مع الشريعة المحدثة بالكامل من الصور (91 سهم) ---
+# --- 4. قائمة الأسهم المتوافقة مع الشريعة (91 سهم) ---
 SHARIAH_STOCKS = {
     "العامة لاستصلاح الاراضي": "AALR.CA",
     "الشركة العربية لادارة وتطوير الأصول": "ACAMD.CA",
@@ -217,36 +217,32 @@ SHARIAH_STOCKS = {
     "الزيوت المستخلصة ومنتجاتها": "ZEOT.CA"
 }
 
-# --- دالة حساب المؤشرات الفنية المتقدمة الاحترافية ---
+# --- حساب المؤشرات الفنية الاحترافية ---
 def calculate_technical_indicators(df):
     if len(df) < 14:
         return df
     
-    # 1. مؤشر القوة النسبية (RSI 14)
     delta = df['Close'].diff()
     gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
     loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
     rs = gain / loss
     df['RSI'] = 100 - (100 / (1 + rs))
 
-    # 2. المتوسطات المتحركة (SMA 20 & SMA 50)
     df['SMA_20'] = df['Close'].rolling(window=20).mean()
     df['SMA_50'] = df['Close'].rolling(window=50).mean()
 
-    # 3. مؤشر MACD
     exp1 = df['Close'].ewm(span=12, adjust=False).mean()
     exp2 = df['Close'].ewm(span=26, adjust=False).mean()
     df['MACD'] = exp1 - exp2
     df['Signal_Line'] = df['MACD'].ewm(span=9, adjust=False).mean()
 
-    # 4. نسبة تغير حجم التداول مقارنة بمتوسط 10 أيام
     df['Vol_Avg_10'] = df['Volume'].rolling(window=10).mean()
     df['Vol_Ratio'] = df['Volume'] / df['Vol_Avg_10']
 
     return df
 
-# --- 5. جلب الأسعار اللحظية مع التحليل الفني ---
-@st.cache_data(ttl=180)  # تحديث البيانات كل 3 دقائق
+# --- جلب الأسعار ---
+@st.cache_data(ttl=180)
 def fetch_stocks_data():
     results = []
     tickers = list(SHARIAH_STOCKS.values())
@@ -255,7 +251,7 @@ def fetch_stocks_data():
         for name, symbol in SHARIAH_STOCKS.items():
             try:
                 t = data.tickers[symbol]
-                hist = t.history(period="3m") # فترة 3 شهور كافية لحساب المؤشرات الاحترافية
+                hist = t.history(period="3m")
                 
                 if not hist.empty and len(hist) >= 2:
                     hist = calculate_technical_indicators(hist)
@@ -268,7 +264,6 @@ def fetch_stocks_data():
                     high = latest['High']
                     low = latest['Low']
                     
-                    # مؤشرات فنية
                     rsi = latest['RSI'] if 'RSI' in latest and not pd.isna(latest['RSI']) else 50
                     macd = latest['MACD'] if 'MACD' in latest and not pd.isna(latest['MACD']) else 0
                     signal = latest['Signal_Line'] if 'Signal_Line' in latest and not pd.isna(latest['Signal_Line']) else 0
@@ -297,31 +292,24 @@ def fetch_stocks_data():
         st.error(f"خطأ أثناء جلب البيانات: {e}")
     return pd.DataFrame(results)
 
-# --- 6. تحليل الفرص بالذكاء الاصطناعي بنمط مدير محافظ محترف ---
+# --- تحليل الفرص بالذكاء الاصطناعي ---
 def generate_ai_opportunities(df_stocks):
     model = get_gemini_model()
-    
     active_stocks = df_stocks[df_stocks['price'] > 0]
     
     stocks_summary = []
     for _, row in active_stocks.iterrows():
         stocks_summary.append(
-            f"- {row['name']} ({row['symbol']}): السعر {row['price']:.2f} EGP | التغير {row['pct_change']:.2f}% | RSI {row['rsi']:.1f} | MACD {row['macd']:.2f} (Signal {row['signal']:.2f}) | SMA20 {row['sma_20']:.2f} | نسبة حجم التداول {row['vol_ratio']:.2f}x"
+            f"- {row['name']} ({row['symbol']}): السعر {row['price']:.2f} EGP | التغير {row['pct_change']:.2f}% | RSI {row['rsi']:.1f} | MACD {row['macd']:.2f} | نسبة حجم التداول {row['vol_ratio']:.2f}x"
         )
     
     prompt = f"""
     أنت مدير محافظ مالية ومحلل تقني خبير متخصص في البورصة المصرية (EGX).
-    قم بتحليل بيانات أسهم الشريعة الإسلامية التالية المرفقة ببيانات المؤشرات الفنية الاحترافية (RSI, MACD, Volume Ratio, SMA20):
+    قم بتحليل بيانات الأسهم المتوافقة مع الشريعة التالية:
     
     {chr(10).join(stocks_summary)}
     
-    المطلوب:
-    قم بفرز وتقييم الأسهم بناءً على معايير التحليل الفني للمحترفين:
-    1. الأسهم في مناطق تجميع أو اختراق لمستويات المقاومة مع دعم من حجم التداول (Volume Ratio > 1.2).
-    2. مؤشر القوة النسبية RSI يظهر عدم وجود تشبع شرائي زائد (أفضل نطاق بين 40 و 65).
-    3. إشارات تقاطع إيجابي في مؤشر MACD فوق خط الإشارة.
-    
-    اختر أفضل 4 إلى 5 فرص استثمارية فقط.
+    اختر أفضل 4 إلى 5 فرص استثمارية فقط بناءً على التحليل الفني والزخم.
     أرجع النتيجة حتمياً بصيغة JSON فقط كقائمة بالشكل التالي دون أي مقدمات أو علامات markdown زائدة:
     [
       {{
@@ -330,7 +318,7 @@ def generate_ai_opportunities(df_stocks):
         "سعر الشراء": "35.50",
         "السعر المستهدف": "42.00",
         "وقف الخسارة": "33.00",
-        "أسباب التحليل": "شرح فني محترف يشمل إشارات RSI والزخم ومستويات الدعم/المقاومة الأحدث وحجم التداول"
+        "أسباب التحليل": "شرح فني محترف يشمل إشارات RSI والزخم ومستويات الدعم/المقاومة وحجم التداول"
       }}
     ]
     """
@@ -354,7 +342,7 @@ def generate_ai_opportunities(df_stocks):
                 "سعر الشراء": f"{row['price']:.2f}",
                 "السعر المستهدف": f"{(row['price'] * 1.12):.2f}",
                 "وقف الخسارة": f"{(row['price'] * 0.94):.2f}",
-                "أسباب التحليل": "اختراق مستوى المتوسط المتحرك 20 يوماً مع زخم إيجابي على مؤشر RSI وزيادة في أحجام التداول."
+                "أسباب التحليل": "زخم إيجابي واختراق مستويات مقاومة هامة مع حجم تداول مستقر."
             })
         return opportunities
 
@@ -363,7 +351,7 @@ st.markdown('<h1 class="main-header">📈 أسهم الشريعة الإسلام
 
 col_info, col_btn = st.columns([3, 1])
 with col_info:
-    st.write("أسعار لحظية وتحليل ذكي لأفضل الفرص الاستثمارية في الأسهم المتوافقة مع الشريعة الإسلامية.")
+    st.write("أكثر 5 أسهم ارتفاعاً في القائمة، وتحليل ذكي لأفضل الفرص الاستثمارية الحالية.")
 with col_btn:
     if st.button("🔄 تحديث البيانات", use_container_width=True):
         st.cache_data.clear()
@@ -373,36 +361,28 @@ with col_btn:
 with st.spinner("جاري جلب الأسعار اللحظية وتحليل المؤشرات الفنية..."):
     df_stocks = fetch_stocks_data()
 
-# 1. قائمة الأسهم المحدثة + شريط البحث
-st.subheader("📋 قائمة الأسهم المتوافقة مع الشريعة")
-
-search_term = st.text_input("🔍 البحث باسم السهم أو الكود:", "")
+# 1. عرض أكثر 5 أسهم ارتفاعاً فقط
+st.subheader("🔥 أكثر 5 أسهم ارتفاعاً في قائمة الشريعة")
 
 if not df_stocks.empty:
-    filtered_df = df_stocks[df_stocks['name'].str.contains(search_term) | df_stocks['symbol'].str.contains(search_term, case=False)]
+    # فرز الأسهم تصاعدياً حسب نسبة التغير لجلب الأعلى ارتفاعاً
+    top_gainers = df_stocks.sort_values(by="pct_change", ascending=False).head(5)
     
-    cols_per_row = 2
-    for i in range(0, len(filtered_df), cols_per_row):
-        cols = st.columns(cols_per_row)
-        for j in range(cols_per_row):
-            if i + j < len(filtered_df):
-                item = filtered_df.iloc[i + j]
-                change_class = "price-up" if item['pct_change'] >= 0 else "price-down"
-                sign = "+" if item['pct_change'] >= 0 else ""
-                
-                with cols[j]:
-                    st.markdown(f"""
-                    <div class="stock-card">
-                        <div style="display: flex; justify-content: space-between; align-items: center;">
-                            <span class="stock-title">{item['name']} <small style="color:#64748b;">({item['symbol']})</small></span>
-                            <span class="{change_class}">{sign}{item['pct_change']:.2f}%</span>
-                        </div>
-                        <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 8px;">
-                            <span class="stock-price">{item['price']:.2f} EGP</span>
-                            <span style="font-size: 0.8rem; color: #64748b;">أعلى: {item['high']:.2f} | أقل: {item['low']:.2f}</span>
-                        </div>
-                    </div>
-                    """, unsafe_allow_html=True)
+    cols = st.columns(len(top_gainers) if len(top_gainers) > 0 else 1)
+    for idx, (_, item) in enumerate(top_gainers.iterrows()):
+        change_class = "price-up" if item['pct_change'] >= 0 else "price-down"
+        sign = "+" if item['pct_change'] >= 0 else ""
+        
+        with cols[idx]:
+            st.markdown(f"""
+            <div class="stock-card">
+                <div class="stock-title">{item['name']} <small style="color:#64748b;">({item['symbol']})</small></div>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 8px;">
+                    <span class="stock-price">{item['price']:.2f} EGP</span>
+                    <span class="{change_class}">{sign}{item['pct_change']:.2f}%</span>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
 else:
     st.warning("تعذر جلب بيانات الأسهم. اضغط على زر التحديث للمحاولة.")
 
@@ -445,4 +425,3 @@ if not df_stocks.empty:
                 </div>
             </div>
             """, unsafe_allow_html=True)
-                
