@@ -5,7 +5,7 @@ from concurrent.futures import ThreadPoolExecutor
 from google import genai
 
 # ---------------------------------------------------------
-# 1. إعدادات الصفحة والتصميم
+# 1. إعدادات الصفحة
 # ---------------------------------------------------------
 st.set_page_config(
     page_title="منصة الأسهم الإسلامية | EGX Shariah",
@@ -83,7 +83,7 @@ def fetch_all_data():
     return df
 
 # ---------------------------------------------------------
-# 5. زر التحديث وجدول الأسعار
+# 5. عرض الأسعار
 # ---------------------------------------------------------
 if st.button("🔄 تحديث الأسعار الآن"):
     st.session_state['df_data'] = fetch_all_data()
@@ -101,7 +101,7 @@ else:
 st.markdown("---")
 
 # ---------------------------------------------------------
-# 6. قسم التقرير والذكاء الاصطناعي
+# 6. قسم التقرير والذكاء الاصطناعي (جلب ديناميكي للموديل)
 # ---------------------------------------------------------
 if st.button("✨ استخراج التقرير والتحليل الذكي"):
     if not api_key:
@@ -109,12 +109,24 @@ if st.button("✨ استخراج التقرير والتحليل الذكي"):
     elif df.empty:
         st.error("لا توجد بيانات أسهم لتحليلها.")
     else:
-        with st.spinner("🧠 جاري إعداد التقرير بواسطة الذكاء الاصطناعي..."):
+        with st.spinner("🧠 جاري البحث عن الموديل المتاح وإعداد التقرير..."):
             try:
-                # تشغيل عميل الذكاء الاصطناعي الجديد
                 client = genai.Client(api_key=api_key)
                 
-                # إعداد البيانات المقترحة للتحليل
+                # جلب قائمة الموديلات المتاحة في حسابك تلقائياً
+                available_models = [m.name for m in client.models.list()]
+                
+                # اختيار أفضل موديل متاح
+                target_model = None
+                for m in available_models:
+                    if 'flash' in m or 'pro' in m:
+                        target_model = m
+                        break
+                
+                # إذا لم يجد، يأخذ أول موديل في القائمة
+                if not target_model and available_models:
+                    target_model = available_models[0]
+
                 table_text = df.to_string(index=False)
                 
                 prompt = f"""
@@ -128,9 +140,9 @@ if st.button("✨ استخراج التقرير والتحليل الذكي"):
                 2. رؤية سريعة وحالة السوق وحركة السيولة.
                 """
 
-                # طلب التحليل بموديل flash المباشر
+                # تنفيذ الطلب بالموديل الذي تم اكتشافه تلقائياً
                 response = client.models.generate_content(
-                    model='gemini-2.5-flash',
+                    model=target_model,
                     contents=prompt
                 )
 
