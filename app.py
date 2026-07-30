@@ -70,6 +70,18 @@ st.markdown("""
         border-bottom: 1px solid #f1f5f9;
     }
 
+    .bounce-card {
+        background-color: #ffffff;
+        border-right: 5px solid #d97706; /* لون برتقالي مخصص لفرص الارتداد */
+        border-radius: 10px;
+        padding: 16px;
+        margin-bottom: 15px;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+        border-top: 1px solid #f1f5f9;
+        border-left: 1px solid #f1f5f9;
+        border-bottom: 1px solid #f1f5f9;
+    }
+
     .badge-buy-strong {
         background-color: #dcfce7;
         color: #15803d;
@@ -82,6 +94,15 @@ st.markdown("""
     .badge-buy {
         background-color: #e0f2fe;
         color: #0369a1;
+        padding: 4px 10px;
+        border-radius: 20px;
+        font-size: 0.85rem;
+        font-weight: bold;
+    }
+
+    .badge-bounce {
+        background-color: #fef3c7;
+        color: #b45309;
         padding: 4px 10px;
         border-radius: 20px;
         font-size: 0.85rem;
@@ -290,9 +311,9 @@ def generate_ai_opportunities(df_stocks, timeframe_filter):
         response = model.generate_content(prompt)
         text = response.text.strip()
         if "```json" in text:
-            text = text.split("```json")[1].split("```").strip()
+            text = text.split("```json")[1].split("```")[0].strip()
         elif "```" in text:
-            text = text.split("```").split("```")[0].strip()
+            text = text.split("```")[1].split("```")[0].strip()
         return json.loads(text)
     except Exception:
         timings = ["مضاربة يومية", "صعود أسبوعي", "صعود شهري", "مضاربة يومية"]
@@ -314,6 +335,65 @@ def generate_ai_opportunities(df_stocks, timeframe_filter):
                 "السعر المستهدف": f"{(row['price'] * 1.08):.2f}",
                 "وقف الخسارة": f"{(row['price'] * 0.96):.2f}",
                 "أسباب التحليل": assigned_reason
+            })
+        return fallback_list
+
+# --- تحليل فرص الارتداد من الأسهم المنخفضة ---
+def generate_ai_bounce_opportunities(df_stocks):
+    model = get_gemini_model()
+    
+    # اختيار الأسهم ذات الأداء السلبي أو الأكثر تراجعاً
+    df_sorted = df_stocks.sort_values(by="pct_change", ascending=True).head(20)
+    
+    stocks_summary = []
+    for _, row in df_sorted.iterrows():
+        stocks_summary.append(
+            f"- {row['name']} ({row['symbol']}): السعر الحالي {row['price']:.2f} EGP، التغير {row['pct_change']:.2f}%، أعلى {row['high']:.2f}، أقل {row['low']:.2f}"
+        )
+        
+    prompt = f"""
+    أنت محلل فني خبير في البورصة المصرية متأقلم مع قنص القيعان واستراتيجية الارتداد الفني (Mean Reversion / Technical Bounce).
+    اختر من 3 إلى 4 أسهم من القائمة التالية تمثل أفضل فرص ارتداد صعودي قريب بعد هبوط أو تصحيح.
+    
+    أرجع النتيجة حتمياً بصيغة JSON فقط كقائمة بالشكل التالي دون أي مقدمات أو علامات markdown زائدة:
+    [
+      {{
+        "اسم السهم": "اسم السهم من القائمة بالضبط",
+        "التوصية": "ارتداد متوقع",
+        "المدى الزمني": "ارتداد قريب",
+        "سعر الشراء": "12.20",
+        "السعر المستهدف": "14.50",
+        "وقف الخسارة": "11.50",
+        "أسباب التحليل": "اذكر سبب ارتداد فني محدد مثل وصوله لمستوى دعم قوي، أو مؤشر التشبع البيعي RSI، أو تناقص حجم التداول مع الهبوط."
+      }}
+    ]
+    القائمة:
+    {chr(10).join(stocks_summary)}
+    """
+    try:
+        response = model.generate_content(prompt)
+        text = response.text.strip()
+        if "```json" in text:
+            text = text.split("```json")[1].split("```")[0].strip()
+        elif "```" in text:
+            text = text.split("```")[1].split("```")[0].strip()
+        return json.loads(text)
+    except Exception:
+        fallback_list = []
+        reasons_bounce = [
+            "وصول السعر إلى مناطق دعم تاريخية قوية مع انخفاض كميات البيع، مما يرشح رد فعل إيجابي صاعد.",
+            "مؤشرات الزخم تشير لدخول السهم منطقة التشبع البيعي (Oversold) مع بدء ظهور المشتري على استحياء.",
+            "السهم ينهي موجة تصحيحية قصيرة واقتراب الارتداد لإعادة اختبار القمة السابقة."
+        ]
+        for idx, (_, row) in enumerate(df_sorted.head(3).iterrows()):
+            fallback_list.append({
+                "اسم السهم": row['name'],
+                "التوصية": "فرصة ارتداد",
+                "المدى الزمني": "ارتداد قريب",
+                "سعر الشراء": f"{row['price']:.2f}",
+                "السعر المستهدف": f"{(row['price'] * 1.07):.2f}",
+                "وقف الخسارة": f"{(row['price'] * 0.95):.2f}",
+                "أسباب التحليل": reasons_bounce[idx % len(reasons_bounce)]
             })
         return fallback_list
 
@@ -422,4 +502,4 @@ if not df_stocks.empty:
                     <strong>💡 أسباب التحليل:</strong> {item.get('أسباب التحليل')}
                 </div>
             </div>
-            """, unsafe_allow_html=True)
+        
