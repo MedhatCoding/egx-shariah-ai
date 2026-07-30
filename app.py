@@ -248,7 +248,7 @@ def fetch_stocks_data():
             continue
     return pd.DataFrame(results)
 
-# --- تحليل الفرص بالذكاء الاصطناعي مع إجبار كتابة أسباب تحليل فنية حقيقية ومفصلة ---
+# --- تحليل الفرص بالذكاء الاصطناعي ---
 def generate_ai_opportunities(df_stocks, timeframe_filter):
     model = get_gemini_model()
     
@@ -257,7 +257,9 @@ def generate_ai_opportunities(df_stocks, timeframe_filter):
     
     stocks_summary = []
     for _, row in df_shuffled.head(35).iterrows():
-        stocks_summary.append(f"- {row['name']} ({row['symbol']}): السعر الحالي {row['price']:.2f} EGP، التغير {row['pct_change']:.2f}%، أعلى {row['high']:.2f}، أقل {row['low']:.2f}")
+        stocks_summary.append(
+            f"- {row['name']} ({row['symbol']}): السعر الحالي {row['price']:.2f} EGP، التغير {row['pct_change']:.2f}%، أعلى {row['high']:.2f}، أقل {row['low']:.2f}"
+        )
     
     if timeframe_filter == "جميع المدى الزمني":
         time_instruction = "قم بتنويع الفرص ووضع مداه الزمني الخاص بكل سهم (مضاربة يومية، صعود أسبوعي، أو صعود شهري)."
@@ -269,11 +271,6 @@ def generate_ai_opportunities(df_stocks, timeframe_filter):
     {time_instruction}
     
     اختر من 4 إلى 5 أسهم مختلفة من القائمة التالية. 
-    تعليمات صارمة جداً بخصوص "أسباب التحليل": ممنوع تماماً استخدام الجمل المبهمة أو المكررة مثل (تحليل فني متوافق مع المدى). يجب أن تكتب في خانة "أسباب التحليل" سبباً فنياً حقيقياً ووافياً لكل سهم يعتمد على سعره الحالي، مثل: (ارتفاع أحجام التداول واختراق مستوى مقاومة قرب السعر الحالي مع وجود زخم إيجابي يدعم استمرار الصعود نحو الهدف المذكور).
-    
-    القائمة:
-    {chr(10).join(stocks_summary)}
-    
     أرجع النتيجة حتمياً بصيغة JSON فقط كقائمة بالشكل التالي دون أي مقدمات أو علامات markdown زائدة:
     [
       {{
@@ -286,14 +283,16 @@ def generate_ai_opportunities(df_stocks, timeframe_filter):
         "أسباب التحليل": "اكتب هنا سبباً فنياً تفصيلياً وحقيقياً مدعماً بحركة السعر والزخم"
       }}
     ]
+    القائمة:
+    {chr(10).join(stocks_summary)}
     """
     try:
         response = model.generate_content(prompt)
         text = response.text.strip()
         if "```json" in text:
-            text = text.split("```json")[1].split("```")[0].strip()
+            text = text.split("```json")[1].split("```").strip()
         elif "```" in text:
-            text = text.split("```")[1].split("```")[0].strip()
+            text = text.split("```").split("```")[0].strip()
         return json.loads(text)
     except Exception:
         timings = ["مضاربة يومية", "صعود أسبوعي", "صعود شهري", "مضاربة يومية"]
@@ -378,19 +377,34 @@ if not df_stocks.empty:
         for item in opp_data:
             rec = item.get("التوصية", "شراء")
             time_frame = item.get("المدى الزمني", "صعود أسبوعي")
+            stock_name = item.get("اسم السهم")
+            stock_row = df_stocks[df_stocks["name"] == stock_name]
+
+            live_price = None
+            live_change = None
+            if not stock_row.empty:
+                live_price = float(stock_row.iloc[0]["price"])
+                live_change = float(stock_row.iloc[0]["pct_change"])
+
             badge_class = "badge-buy-strong" if "قوي" in rec else ("badge-buy" if "شراء" in rec else "badge-hold")
             border_color = "#16a34a" if "قوي" in rec else ("#2563eb" if "شراء" in rec else "#d97706")
-            
+            live_price_text = f"{live_price:.2f} EGP" if live_price is not None else "غير متاح"
+            live_change_text = f"({live_change:+.2f}%)" if live_change is not None else ""
+
             st.markdown(f"""
             <div class="opp-card" style="border-right-color: {border_color};">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-                    <span style="font-size: 1.15rem; font-weight: bold; color: #0f172a;">🎯 {item.get('اسم السهم')}</span>
+                    <span style="font-size: 1.15rem; font-weight: bold; color: #0f172a;">🎯 {stock_name}</span>
                     <div style="display: flex; gap: 8px; align-items: center;">
                         <span class="badge-time">⏱️ {time_frame}</span>
                         <span class="{badge_class}">{rec}</span>
                     </div>
                 </div>
-                <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; background-color: #f8fafc; padding: 10px; border-radius: 8px; text-align: center; margin-bottom: 10px;">
+                <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; background-color: #f8fafc; padding: 10px; border-radius: 8px; text-align: center; margin-bottom: 10px;">
+                    <div>
+                        <div style="font-size: 0.75rem; color: #64748b;">السعر اللحظي</div>
+                        <div style="font-weight: bold; color: #0f172a;">{live_price_text} <span style="font-size:0.8rem;color:#64748b;">{live_change_text}</span></div>
+                    </div>
                     <div>
                         <div style="font-size: 0.75rem; color: #64748b;">سعر الدخول/الشراء</div>
                         <div style="font-weight: bold; color: #0f172a;">{item.get('سعر الشراء')} EGP</div>
