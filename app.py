@@ -222,12 +222,11 @@ def fetch_stocks_data():
             continue
     return pd.DataFrame(results)
 
-# دمج السعر اللحظي الحقيقي مع بيانات الذكاء الاصطناعي
+# دمج السعر اللحظي الحقيقي مع نتائج الذكاء الاصطناعي
 def enrich_opportunities_with_live_prices(ai_items, df_stocks):
     enriched = []
     for item in ai_items:
         stock_name = item.get('اسم السهم')
-        # البحث عن السعر الحقيقي المطابق للاسم في جدول البيانات اللحظية
         match = df_stocks[df_stocks['name'] == stock_name]
         if not match.empty:
             live_price = match.iloc[0]['price']
@@ -365,4 +364,4 @@ else:
                 <div><strong>💡 التحليل:</strong> {item.get('أسباب التحليل')}</div>
             </div>
             """, unsafe_allow_html=True)
-                
+            
