@@ -70,18 +70,6 @@ st.markdown("""
         border-bottom: 1px solid #f1f5f9;
     }
 
-    .bounce-card {
-        background-color: #ffffff;
-        border-right: 5px solid #d97706;
-        border-radius: 10px;
-        padding: 16px;
-        margin-bottom: 15px;
-        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
-        border-top: 1px solid #f1f5f9;
-        border-left: 1px solid #f1f5f9;
-        border-bottom: 1px solid #f1f5f9;
-    }
-
     .badge-buy-strong {
         background-color: #dcfce7;
         color: #15803d;
@@ -94,15 +82,6 @@ st.markdown("""
     .badge-buy {
         background-color: #e0f2fe;
         color: #0369a1;
-        padding: 4px 10px;
-        border-radius: 20px;
-        font-size: 0.85rem;
-        font-weight: bold;
-    }
-
-    .badge-bounce {
-        background-color: #fef3c7;
-        color: #b45309;
         padding: 4px 10px;
         border-radius: 20px;
         font-size: 0.85rem;
@@ -247,12 +226,12 @@ def fetch_stocks_data():
             t = yf.Ticker(symbol)
             hist = t.history(period="5d")
             if not hist.empty and len(hist) >= 2:
-                current = float(hist['Close'].iloc[-1])
-                prev = float(hist['Close'].iloc[-2])
+                current = hist['Close'].iloc[-1]
+                prev = hist['Close'].iloc[-2]
                 change = current - prev
                 pct_change = (change / prev) * 100
-                high = float(hist['High'].max())
-                low = float(hist['Low'].min())
+                high = hist['High'].max()
+                low = hist['Low'].min()
             else:
                 current, change, pct_change, high, low = 15.0, 0.5, 1.2, 15.5, 14.5
             
@@ -278,20 +257,15 @@ def generate_ai_opportunities(df_stocks, timeframe_filter):
     
     stocks_summary = []
     for _, row in df_shuffled.head(35).iterrows():
-        p_val = float(row['price'])
-        pct_val = float(row['pct_change'])
-        h_val = float(row['high'])
-        l_val = float(row['low'])
         stocks_summary.append(
-            "- " + str(row['name']) + " (" + str(row['symbol']) + "): السعر " + f"{p_val:.2f}" + " EGP، التغير " + f"{pct_val:.2f}" + "%، أعلى " + f"{h_val:.2f}" + "، أقل " + f"{l_val:.2f}"
+            f"- {row['name']} ({row['symbol']}): السعر الحالي {row['price']:.2f} EGP، التغير {row['pct_change']:.2f}%، أعلى {row['high']:.2f}، أقل {row['low']:.2f}"
         )
     
     if timeframe_filter == "جميع المدى الزمني":
         time_instruction = "قم بتنويع الفرص ووضع مداه الزمني الخاص بكل سهم (مضاربة يومية، صعود أسبوعي، أو صعود شهري)."
     else:
-        time_instruction = "اجعل كل الفرص تتبع حصرياً المدى الزمني المحدد: " + str(timeframe_filter)
+        time_instruction = f"اجعل كل الفرص تتبع حصرياً المدى الزمني المحدد: [{timeframe_filter}]."
 
-    stocks_text = "\n".join(stocks_summary)
     prompt = f"""
     أنت محلل فني محترف في البورصة المصرية (EGX).
     {time_instruction}
@@ -310,15 +284,15 @@ def generate_ai_opportunities(df_stocks, timeframe_filter):
       }}
     ]
     القائمة:
-    {stocks_text}
+    {chr(10).join(stocks_summary)}
     """
     try:
         response = model.generate_content(prompt)
         text = response.text.strip()
         if "```json" in text:
-            text = text.split("```json")[1].split("```")[0].strip()
+            text = text.split("```json")[1].split("```").strip()
         elif "```" in text:
-            text = text.split("```")[1].split("```")[0].strip()
+            text = text.split("```").split("```")[0].strip()
         return json.loads(text)
     except Exception:
         timings = ["مضاربة يومية", "صعود أسبوعي", "صعود شهري", "مضاربة يومية"]
@@ -330,81 +304,16 @@ def generate_ai_opportunities(df_stocks, timeframe_filter):
         ]
         fallback_list = []
         for idx, (_, row) in enumerate(df_stocks.sample(4, random_state=seed_val).iterrows()):
-            p_val = float(row['price'])
             assigned_time = timings[idx % len(timings)] if timeframe_filter == "جميع المدى الزمني" else timeframe_filter
             assigned_reason = reasons[idx % len(reasons)]
             fallback_list.append({
-                "اسم السهم": str(row['name']),
+                "اسم السهم": row['name'],
                 "التوصية": "شراء",
                 "المدى الزمني": assigned_time,
-                "سعر الشراء": f"{p_val:.2f}",
-                "السعر المستهدف": f"{(p_val * 1.08):.2f}",
-                "وقف الخسارة": f"{(p_val * 0.96):.2f}",
+                "سعر الشراء": f"{row['price']:.2f}",
+                "السعر المستهدف": f"{(row['price'] * 1.08):.2f}",
+                "وقف الخسارة": f"{(row['price'] * 0.96):.2f}",
                 "أسباب التحليل": assigned_reason
-            })
-        return fallback_list
-
-# --- تحليل فرص الارتداد من الأسهم المنخفضة ---
-def generate_ai_bounce_opportunities(df_stocks):
-    model = get_gemini_model()
-    
-    df_sorted = df_stocks.sort_values(by="pct_change", ascending=True).head(20)
-    
-    stocks_summary = []
-    for _, row in df_sorted.iterrows():
-        p_val = float(row['price'])
-        pct_val = float(row['pct_change'])
-        h_val = float(row['high'])
-        l_val = float(row['low'])
-        stocks_summary.append(
-            "- " + str(row['name']) + " (" + str(row['symbol']) + "): السعر " + f"{p_val:.2f}" + " EGP، التغير " + f"{pct_val:.2f}" + "%، أعلى " + f"{h_val:.2f}" + "، أقل " + f"{l_val:.2f}"
-        )
-        
-    stocks_text = "\n".join(stocks_summary)
-    prompt = f"""
-    أنت محلل فني خبير في البورصة المصرية متأقلم مع قنص القيعان واستراتيجية الارتداد الفني (Mean Reversion / Technical Bounce).
-    اختر من 3 إلى 4 أسهم من القائمة التالية تمثل أفضل فرص ارتداد صعودي قريب بعد هبوط أو تصحيح.
-    
-    أرجع النتيجة حتمياً بصيغة JSON فقط كقائمة بالشكل التالي دون أي مقدمات أو علامات markdown زائدة:
-    [
-      {{
-        "اسم السهم": "اسم السهم من القائمة بالضبط",
-        "التوصية": "ارتداد متوقع",
-        "المدى الزمني": "ارتداد قريب",
-        "سعر الشراء": "12.20",
-        "السعر المستهدف": "14.50",
-        "وقف الخسارة": "11.50",
-        "أسباب التحليل": "اذكر سبب ارتداد فني محدد مثل وصوله لمستوى دعم قوي، أو مؤشر التشبع البيعي RSI، أو تناقص حجم التداول مع الهبوط."
-      }}
-    ]
-    القائمة:
-    {stocks_text}
-    """
-    try:
-        response = model.generate_content(prompt)
-        text = response.text.strip()
-        if "```json" in text:
-            text = text.split("```json")[1].split("```")[0].strip()
-        elif "```" in text:
-            text = text.split("```")[1].split("```")[0].strip()
-        return json.loads(text)
-    except Exception:
-        fallback_list = []
-        reasons_bounce = [
-            "وصول السعر إلى مناطق دعم تاريخية قوية مع انخفاض كميات البيع، مما يرشح رد فعل إيجابي صاعد.",
-            "مؤشرات الزخم تشير لدخول السهم منطقة التشبع البيعي (Oversold) مع بدء ظهور المشتري على استحياء.",
-            "السهم ينهي موجة تصحيحية قصيرة واقتراب الارتداد لإعادة اختبار القمة السابقة."
-        ]
-        for idx, (_, row) in enumerate(df_sorted.head(3).iterrows()):
-            p_val = float(row['price'])
-            fallback_list.append({
-                "اسم السهم": str(row['name']),
-                "التوصية": "فرصة ارتداد",
-                "المدى الزمني": "ارتداد قريب",
-                "سعر الشراء": f"{p_val:.2f}",
-                "السعر المستهدف": f"{(p_val * 1.07):.2f}",
-                "وقف الخسارة": f"{(p_val * 0.95):.2f}",
-                "أسباب التحليل": reasons_bounce[idx % len(reasons_bounce)]
             })
         return fallback_list
 
@@ -432,28 +341,18 @@ if not df_stocks.empty:
         change_class = "price-up" if item['pct_change'] >= 0 else "price-down"
         sign = "+" if item['pct_change'] >= 0 else ""
         
-        card_html = """
+        st.markdown(f"""
         <div class="stock-card">
             <div style="display: flex; justify-content: space-between; align-items: center;">
-                <span class="stock-title">__NAME__ <small style="color:#64748b;">(__SYMBOL__)</small></span>
-                <span class="__CLASS__">__SIGN____PCT__%</span>
+                <span class="stock-title">{item['name']} <small style="color:#64748b;">({item['symbol']})</small></span>
+                <span class="{change_class}">{sign}{item['pct_change']:.2f}%</span>
             </div>
             <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 8px;">
-                <span class="stock-price">__PRICE__ EGP</span>
-                <span style="font-size: 0.8rem; color: #64748b;">أعلى: __HIGH__ | أقل: __LOW__</span>
+                <span class="stock-price">{item['price']:.2f} EGP</span>
+                <span style="font-size: 0.8rem; color: #64748b;">أعلى: {item['high']:.2f} | أقل: {item['low']:.2f}</span>
             </div>
         </div>
-        """
-        card_html = card_html.replace("__NAME__", str(item['name']))
-        card_html = card_html.replace("__SYMBOL__", str(item['symbol']))
-        card_html = card_html.replace("__CLASS__", change_class)
-        card_html = card_html.replace("__SIGN__", sign)
-        card_html = card_html.replace("__PCT__", f"{float(item['pct_change']):.2f}")
-        card_html = card_html.replace("__PRICE__", f"{float(item['price']):.2f}")
-        card_html = card_html.replace("__HIGH__", f"{float(item['high']):.2f}")
-        card_html = card_html.replace("__LOW__", f"{float(item['low']):.2f}")
-        
-        st.markdown(card_html, unsafe_allow_html=True)
+        """, unsafe_allow_html=True)
 else:
     st.warning("جاري تحضير البيانات، اضغط تحديث إذا استمرت المشكلة.")
 
@@ -476,14 +375,9 @@ if not df_stocks.empty:
         opp_data = generate_ai_opportunities(df_stocks, timeframe_filter)
         
         for item in opp_data:
-            rec = str(item.get("التوصية", "شراء"))
-            time_frame = str(item.get("المدى الزمني", "صعود أسبوعي"))
-            stock_name = str(item.get("اسم السهم", ""))
-            buy_p = str(item.get("سعر الشراء", ""))
-            target_p = str(item.get("السعر المستهدف", ""))
-            stop_l = str(item.get("وقف الخسارة", ""))
-            analysis_reason = str(item.get("أسباب التحليل", ""))
-
+            rec = item.get("التوصية", "شراء")
+            time_frame = item.get("المدى الزمني", "صعود أسبوعي")
+            stock_name = item.get("اسم السهم")
             stock_row = df_stocks[df_stocks["name"] == stock_name]
 
             live_price = None
@@ -497,16 +391,35 @@ if not df_stocks.empty:
             live_price_text = f"{live_price:.2f} EGP" if live_price is not None else "غير متاح"
             live_change_text = f"({live_change:+.2f}%)" if live_change is not None else ""
 
-            opp_html = """
-            <div class="opp-card" style="border-right-color: __BORDER__;">
+            st.markdown(f"""
+            <div class="opp-card" style="border-right-color: {border_color};">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-                    <span style="font-size: 1.15rem; font-weight: bold; color: #0f172a;">🎯 __NAME__</span>
+                    <span style="font-size: 1.15rem; font-weight: bold; color: #0f172a;">🎯 {stock_name}</span>
                     <div style="display: flex; gap: 8px; align-items: center;">
-                        <span class="badge-time">⏱️ __TIME__</span>
-                        <span class="__BADGE__">__REC__</span>
+                        <span class="badge-time">⏱️ {time_frame}</span>
+                        <span class="{badge_class}">{rec}</span>
                     </div>
                 </div>
                 <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; background-color: #f8fafc; padding: 10px; border-radius: 8px; text-align: center; margin-bottom: 10px;">
                     <div>
                         <div style="font-size: 0.75rem; color: #64748b;">السعر اللحظي</div>
-        
+                        <div style="font-weight: bold; color: #0f172a;">{live_price_text} <span style="font-size:0.8rem;color:#64748b;">{live_change_text}</span></div>
+                    </div>
+                    <div>
+                        <div style="font-size: 0.75rem; color: #64748b;">سعر الدخول/الشراء</div>
+                        <div style="font-weight: bold; color: #0f172a;">{item.get('سعر الشراء')} EGP</div>
+                    </div>
+                    <div>
+                        <div style="font-size: 0.75rem; color: #64748b;">السعر المستهدف</div>
+                        <div style="font-weight: bold; color: #16a34a;">{item.get('السعر المستهدف')} EGP</div>
+                    </div>
+                    <div>
+                        <div style="font-size: 0.75rem; color: #64748b;">وقف الخسارة</div>
+                        <div style="font-weight: bold; color: #dc2626;">{item.get('وقف الخسارة')} EGP</div>
+                    </div>
+                </div>
+                <div style="font-size: 0.9rem; color: #334155;">
+                    <strong>💡 أسباب التحليل:</strong> {item.get('أسباب التحليل')}
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
