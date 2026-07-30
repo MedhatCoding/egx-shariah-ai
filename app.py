@@ -122,7 +122,7 @@ def get_gemini_model():
             continue
     return genai.GenerativeModel('gemini-1.5-flash')
 
-# --- 4. قائمة الأسهم الشاملة المأخوذة من صور التطبيق الخاصة بك ---
+# --- 4. قائمة الأسهم الشاملة المأخوذة من صور التطبيق ---
 SHARIAH_STOCKS = {
     "القاهرة للخدمات التعليمية": "CAED.CA",
     "شركة مستشفي كليوباترا": "CLHO.CA",
@@ -248,22 +248,14 @@ def fetch_stocks_data():
             continue
     return pd.DataFrame(results)
 
-# --- تحليل الفرص بالذكاء الاصطناعي مقتصرة تماماً على قائمتك ---
+# --- تحليل الفرص بالذكاء الاصطناعي مع الالتزام التام بالفلتر المختار ---
 def generate_ai_opportunities(df_stocks, timeframe_filter):
     model = get_gemini_model()
     stocks_summary = []
     for _, row in df_stocks.iterrows():
         stocks_summary.append(f"- {row['name']} ({row['symbol']}): السعر الحالي {row['price']:.2f} EGP، التغير {row['pct_change']:.2f}%، أعلى سعر {row['high']:.2f}، أقل سعر {row['low']:.2f}")
     
-    time_instruction = ""
-    if timeframe_filter == "مضاربية في نفس الجلسة (يومي)":
-        time_instruction = "ركز فقط على الفرص المناسبة للمضاربة السريعة داخل نفس الجلسة من ضمن هذه الأسهم حصرياً."
-    elif timeframe_filter == "صعود أسبوعي":
-        time_instruction = "ركز على الفرص التي تتطلب مدى زمني أسبوعي من ضمن هذه الأسهم حصرياً."
-    elif timeframe_filter == "صعود شهري (استثماري قصير)":
-        time_instruction = "ركز على الفرص الاستثمارية ذات المدى الشهري من ضمن هذه الأسهم حصرياً."
-    else:
-        time_instruction = "قم بتنويع الفرص المختارة لتشمل أفضل الفرص المتاحة في هذه القائمة."
+    time_instruction = f"الرجاء الالتزام التام بالمدى الزمني التالي وتطبيقه حصرياً على جميع الفرص المرتجعة: [{timeframe_filter}]."
 
     prompt = f"""
     أنت محلل فني محترف في البورصة المصرية (EGX).
@@ -272,13 +264,13 @@ def generate_ai_opportunities(df_stocks, timeframe_filter):
     
     {time_instruction}
     
-    اختر أفضل الفرص الحقيقية المتاحة من هذه الأسهم (لا تضع أسهم من خارج هذه القائمة أبداً). لكل فرصة حدد المدى الزمني وسعر الدخول والمستهدف ووقف الخسارة بدقة.
+    اختر أفضل الفرص الحقيقية المتاحة من هذه الأسهم. يجب أن يكون حقل "المدى الزمني" في ملف الـ JSON مطبقاً تماماً لقيمة الفلتر المطلوب: "{timeframe_filter}".
     أرجع النتيجة حتمياً بصيغة JSON فقط كقائمة تضم عدة كائنات بالشكل التالي دون أي مقدمات أو علامات markdown زائدة:
     [
       {{
         "اسم السهم": "اسم السهم من القائمة بالضبط",
         "التوصية": "شراء قوي",
-        "المدى الزمني": "مضاربة جلسة" أو "أسبوعي" أو "شهري",
+        "المدى الزمني": "{timeframe_filter}",
         "سعر الشراء": "35.50",
         "السعر المستهدف": "42.00",
         "وقف الخسارة": "33.00",
@@ -300,11 +292,11 @@ def generate_ai_opportunities(df_stocks, timeframe_filter):
             fallback_list.append({
                 "اسم السهم": row['name'],
                 "التوصية": "شراء",
-                "المدى الزمني": "أسبوعي",
+                "المدى الزمني": timeframe_filter,
                 "سعر الشراء": f"{row['price']:.2f}",
                 "السعر المستهدف": f"{(row['price'] * 1.10):.2f}",
                 "وقف الخسارة": f"{(row['price'] * 0.95):.2f}",
-                "أسباب التحليل": "زخم إيجابي ملحوظ يدعم الصعود خلال الفترة القادمة."
+                "أسباب التحليل": f"زخم إيجابي ملحوظ يدعم الصعود ضمن المدى الزمني ({timeframe_filter})."
             })
         return fallback_list
 
@@ -358,8 +350,7 @@ with col_filter:
     timeframe_filter = st.selectbox(
         "فلتر حسب المدى الزمني للفرصة:",
         ["جميع المدى الزمني", "مضاربية في نفس الجلسة (يومي)", "صعود أسبوعي", "صعود شهري (استثماري قصير)"],
-        label_visibility="collapsed",
-        on_change=st.rerun
+        label_visibility="collapsed"
     )
 
 if not df_stocks.empty:
@@ -368,7 +359,8 @@ if not df_stocks.empty:
         
         for item in opp_data:
             rec = item.get("التوصية", "شراء")
-            time_frame = item.get("المدى الزمني", "أسبوعي")
+            # ضمان عرض المدى الزمني المختار بالفعل في الشارة بدلاً من أي قيمة قديمة
+            time_frame = timeframe_filter if timeframe_filter != "جميع المدى الزمني" else item.get("المدى الزمني", "أسبوعي")
             badge_class = "badge-buy-strong" if "قوي" in rec else ("badge-buy" if "شراء" in rec else "badge-hold")
             border_color = "#16a34a" if "قوي" in rec else ("#2563eb" if "شراء" in rec else "#d97706")
             
@@ -400,4 +392,4 @@ if not df_stocks.empty:
                 </div>
             </div>
             """, unsafe_allow_html=True)
-    
+            
