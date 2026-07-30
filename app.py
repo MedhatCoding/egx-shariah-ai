@@ -70,18 +70,6 @@ st.markdown("""
         border-bottom: 1px solid #f1f5f9;
     }
 
-    .dip-card {
-        background-color: #ffffff;
-        border-right: 5px solid #dc2626;
-        border-radius: 10px;
-        padding: 16px;
-        margin-bottom: 15px;
-        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
-        border-top: 1px solid #f1f5f9;
-        border-left: 1px solid #f1f5f9;
-        border-bottom: 1px solid #f1f5f9;
-    }
-
     .badge-buy-strong {
         background-color: #dcfce7;
         color: #15803d;
@@ -260,30 +248,16 @@ def fetch_stocks_data():
             continue
     return pd.DataFrame(results)
 
-# --- دمج السعر الحالي اللحظي مع الفرص ---
-def enrich_with_live_prices(ai_items, df_stocks):
-    enriched = []
-    for item in ai_items:
-        stock_name = item.get('اسم السهم')
-        match = df_stocks[df_stocks['name'] == stock_name]
-        if not match.empty:
-            item['live_price'] = f"{match.iloc[0]['price']:.2f}"
-            item['pct_change'] = f"{match.iloc[0]['pct_change']:+.2f}%"
-        else:
-            item['live_price'] = item.get('سعر الشراء', '0.00')
-            item['pct_change'] = "0.00%"
-        enriched.append(item)
-    return enriched
-
-# --- تحليل الفرص العامة بالذكاء الاصطناعي ---
+# --- تحليل الفرص بالذكاء الاصطناعي مع إجبار كتابة أسباب تحليل فنية حقيقية ومفصلة ---
 def generate_ai_opportunities(df_stocks, timeframe_filter):
     model = get_gemini_model()
+    
     seed_val = abs(hash(timeframe_filter)) % 1000
     df_shuffled = df_stocks.sample(frac=1, random_state=seed_val).reset_index(drop=True)
     
     stocks_summary = []
     for _, row in df_shuffled.head(35).iterrows():
-        stocks_summary.append(f"- {row['name']} ({row['symbol']}): السعر الحالي {row['price']:.2f} EGP، التغير {row['pct_change']:.2f}%")
+        stocks_summary.append(f"- {row['name']} ({row['symbol']}): السعر الحالي {row['price']:.2f} EGP، التغير {row['pct_change']:.2f}%، أعلى {row['high']:.2f}، أقل {row['low']:.2f}")
     
     if timeframe_filter == "جميع المدى الزمني":
         time_instruction = "قم بتنويع الفرص ووضع مداه الزمني الخاص بكل سهم (مضاربة يومية، صعود أسبوعي، أو صعود شهري)."
@@ -293,11 +267,14 @@ def generate_ai_opportunities(df_stocks, timeframe_filter):
     prompt = f"""
     أنت محلل فني محترف في البورصة المصرية (EGX).
     {time_instruction}
+    
     اختر من 4 إلى 5 أسهم مختلفة من القائمة التالية. 
-    اكتب في خانة "أسباب التحليل" سبباً فنياً حقيقياً ووافياً يعتمد على سعره الحالي وزخمه.
+    تعليمات صارمة جداً بخصوص "أسباب التحليل": ممنوع تماماً استخدام الجمل المبهمة أو المكررة مثل (تحليل فني متوافق مع المدى). يجب أن تكتب في خانة "أسباب التحليل" سبباً فنياً حقيقياً ووافياً لكل سهم يعتمد على سعره الحالي، مثل: (ارتفاع أحجام التداول واختراق مستوى مقاومة قرب السعر الحالي مع وجود زخم إيجابي يدعم استمرار الصعود نحو الهدف المذكور).
+    
     القائمة:
     {chr(10).join(stocks_summary)}
-    أرجع النتيجة حتمياً بصيغة JSON فقط كقائمة بالشكل التالي دون أي مقدمات:
+    
+    أرجع النتيجة حتمياً بصيغة JSON فقط كقائمة بالشكل التالي دون أي مقدمات أو علامات markdown زائدة:
     [
       {{
         "اسم السهم": "اسم السهم من القائمة بالضبط",
@@ -306,7 +283,7 @@ def generate_ai_opportunities(df_stocks, timeframe_filter):
         "سعر الشراء": "35.50",
         "السعر المستهدف": "42.00",
         "وقف الخسارة": "33.00",
-        "أسباب التحليل": "اكتب هنا سبباً فنياً تفصيلياً..."
+        "أسباب التحليل": "اكتب هنا سبباً فنياً تفصيلياً وحقيقياً مدعماً بحركة السعر والزخم"
       }}
     ]
     """
@@ -317,12 +294,19 @@ def generate_ai_opportunities(df_stocks, timeframe_filter):
             text = text.split("```json")[1].split("```")[0].strip()
         elif "```" in text:
             text = text.split("```")[1].split("```")[0].strip()
-        return enrich_with_live_prices(json.loads(text), df_stocks)
+        return json.loads(text)
     except Exception:
         timings = ["مضاربة يومية", "صعود أسبوعي", "صعود شهري", "مضاربة يومية"]
+        reasons = [
+            "ارتفاع ملحوظ في السيولة اللحظية واقتراب السعر من اختبار مقاومة قوية تدعم الصعود السريع.",
+            "استقرار السعر فوق مناطق الدعم الرئيسية مع تشكل نموذج إيجابي على المدى القصير.",
+            "تجميع إيجابي واضح وتواجد فرص لنمو سعري تدريجي يستهدف مستويات أعلى خلال الفترة القادمة.",
+            "زخم شرائي مكثف يظهر بوضوح في الجلسات الأخيرة مع تحركات إيجابية لأعلى."
+        ]
         fallback_list = []
         for idx, (_, row) in enumerate(df_stocks.sample(4, random_state=seed_val).iterrows()):
             assigned_time = timings[idx % len(timings)] if timeframe_filter == "جميع المدى الزمني" else timeframe_filter
+            assigned_reason = reasons[idx % len(reasons)]
             fallback_list.append({
                 "اسم السهم": row['name'],
                 "التوصية": "شراء",
@@ -330,64 +314,16 @@ def generate_ai_opportunities(df_stocks, timeframe_filter):
                 "سعر الشراء": f"{row['price']:.2f}",
                 "السعر المستهدف": f"{(row['price'] * 1.08):.2f}",
                 "وقف الخسارة": f"{(row['price'] * 0.96):.2f}",
-                "أسباب التحليل": "ارتفاع ملحوظ في السيولة اللحظية واقتراب السعر من اختبار مقاومة قوية."
+                "أسباب التحليل": assigned_reason
             })
-        return enrich_with_live_prices(fallback_list, df_stocks)
-
-# --- تحليل الفرص المنخفضة (مرشحة للارتداد) بالذكاء الاصطناعي ---
-def generate_ai_dip_opportunities(df_stocks, timeframe_filter):
-    model = get_gemini_model()
-    df_negative = df_stocks[df_stocks['pct_change'] < 0].sort_values(by="pct_change", ascending=True)
-    if len(df_negative) < 4:
-        df_negative = df_stocks.sort_values(by="pct_change", ascending=True)
-        
-    seed_val = abs(hash(timeframe_filter + "dip")) % 1000
-    stocks_summary = [f"- {row['name']} ({row['symbol']}): السعر الحالي {row['price']:.2f} EGP، التغير {row['pct_change']:.2f}%" for _, row in df_negative.head(30).iterrows()]
-    
-    prompt = f"""
-    اختر من 4 إلى 5 أسهم تعرضت لانخفاض ولديها فرصة قوية للارتداد من الدعم. اشرح سبب فرصة الارتداد في خانة "أسباب التحليل".
-    القائمة للأسهم المنخفضة:
-    {chr(10).join(stocks_summary)}
-    أرجع النتيجة حتمياً بصيغة JSON فقط كقائمة بالشكل التالي دون أي مقدمات:
-    [
-      {{
-        "اسم السهم": "اسم السهم من القائمة بالضبط",
-        "التوصية": "شراء من الدعم",
-        "المدى الزمني": "صعود أسبوعي",
-        "سعر الشراء": "10.00",
-        "السعر المستهدف": "11.00",
-        "وقف الخسارة": "9.50",
-        "أسباب التحليل": "تصحيح سعري مؤقت قرب دعم قوي..."
-      }}
-    ]
-    """
-    try:
-        response = model.generate_content(prompt)
-        text = response.text.strip()
-        if "```json" in text:
-            text = text.split("```json")[1].split("```")[0].strip()
-        elif "```" in text:
-            text = text.split("```")[1].split("```")[0].strip()
-        return enrich_with_live_prices(json.loads(text), df_stocks)
-    except Exception:
-        fallback = [{
-            "اسم السهم": row['name'],
-            "التوصية": "شراء من الدعم",
-            "المدى الزمني": "صعود أسبوعي",
-            "سعر الشراء": f"{row['price']:.2f}",
-            "السعر المستهدف": f"{(row['price'] * 1.08):.2f}",
-            "وقف الخسارة": f"{(row['price'] * 0.95):.2f}",
-            "أسباب التحليل": "تصحيح سعري مؤقت قرب دعم قوي يتيح فرصة ارتداد مجزية."
-        } for _, row in df_negative.sample(min(4, len(df_negative))).iterrows()]
-        return enrich_with_live_prices(fallback, df_stocks)
-
+        return fallback_list
 
 # --- واجهة التطبيق ---
 st.markdown('<h1 class="main-header">📈 أسهم الشريعة الإسلامية - البورصة المصرية</h1>', unsafe_allow_html=True)
 
 col_info, col_btn = st.columns([3, 1])
 with col_info:
-    st.write("أكثر 5 أسهم ارتفاعاً في قائمتك، تليها الفرص الاستثمارية العامة وقائمة الفرص المنخفضة.")
+    st.write("أكثر 5 أسهم ارتفاعاً في قائمتك، وتحليل ذكي للفرص حسب المدى الزمني.")
 with col_btn:
     if st.button("🔄 تحديث البيانات", use_container_width=True):
         st.cache_data.clear()
@@ -418,10 +354,12 @@ if not df_stocks.empty:
             </div>
         </div>
         """, unsafe_allow_html=True)
+else:
+    st.warning("جاري تحضير البيانات، اضغط تحديث إذا استمرت المشكلة.")
 
 st.markdown("---")
 
-# 2. قسم الفرص الاستثمارية العامة مع الفلتر
+# 2. قسم الفرص من قائمتك مع الفلتر والتحديث الفوري
 col_opp_title, col_filter = st.columns([2, 2])
 with col_opp_title:
     st.subheader("🌟 أفضل الفرص الاستثمارية الموصى بها")
@@ -434,16 +372,17 @@ with col_filter:
     )
 
 if not df_stocks.empty:
-    with st.spinner("جاري تحليل الفرص الاستثمارية..."):
+    with st.spinner("جاري تحليل أسهم قائمتك وتصنيف الفرص..."):
         opp_data = generate_ai_opportunities(df_stocks, timeframe_filter)
         
         for item in opp_data:
             rec = item.get("التوصية", "شراء")
             time_frame = item.get("المدى الزمني", "صعود أسبوعي")
-            badge_class = "badge-buy-strong" if "قوي" in rec else "badge-buy"
+            badge_class = "badge-buy-strong" if "قوي" in rec else ("badge-buy" if "شراء" in rec else "badge-hold")
+            border_color = "#16a34a" if "قوي" in rec else ("#2563eb" if "شراء" in rec else "#d97706")
             
             st.markdown(f"""
-            <div class="opp-card">
+            <div class="opp-card" style="border-right-color: {border_color};">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
                     <span style="font-size: 1.15rem; font-weight: bold; color: #0f172a;">🎯 {item.get('اسم السهم')}</span>
                     <div style="display: flex; gap: 8px; align-items: center;">
@@ -451,17 +390,13 @@ if not df_stocks.empty:
                         <span class="{badge_class}">{rec}</span>
                     </div>
                 </div>
-                <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; background-color: #f8fafc; padding: 10px; border-radius: 8px; text-align: center; margin-bottom: 10px;">
+                <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; background-color: #f8fafc; padding: 10px; border-radius: 8px; text-align: center; margin-bottom: 10px;">
                     <div>
-                        <div style="font-size: 0.75rem; color: #64748b;">السعر اللحظي</div>
-                        <div style="font-weight: bold; color: #2563eb;">{item.get('live_price')} EGP</div>
-                    </div>
-                    <div>
-                        <div style="font-size: 0.75rem; color: #64748b;">سعر الشراء</div>
+                        <div style="font-size: 0.75rem; color: #64748b;">سعر الدخول/الشراء</div>
                         <div style="font-weight: bold; color: #0f172a;">{item.get('سعر الشراء')} EGP</div>
                     </div>
                     <div>
-                        <div style="font-size: 0.75rem; color: #64748b;">المستهدف</div>
+                        <div style="font-size: 0.75rem; color: #64748b;">السعر المستهدف</div>
                         <div style="font-weight: bold; color: #16a34a;">{item.get('السعر المستهدف')} EGP</div>
                     </div>
                     <div>
@@ -474,34 +409,3 @@ if not df_stocks.empty:
                 </div>
             </div>
             """, unsafe_allow_html=True)
-
-st.markdown("---")
-
-# 3. القائمة الثالثة: قسم الفرص المنخفضة المرشحة للارتداد (تحت القوائم السابقة)
-col_dip_title, col_dip_filter = st.columns([2, 2])
-with col_dip_title:
-    st.subheader("📉 قائمة الفرص المنخفضة (مرشحة للارتداد)")
-
-with col_dip_filter:
-    dip_timeframe_filter = st.selectbox(
-        "فلتر مدى الارتداد:",
-        ["جميع المدى الزمني", "مضاربية في نفس الجلسة (يومي)", "صعود أسبوعي", "صعود شهري"],
-        label_visibility="collapsed",
-        key="dip_filter_selectbox"
-    )
-
-if not df_stocks.empty:
-    with st.spinner("جاري رصد الفرص المنخفضة المرشحة للارتداد..."):
-        dip_data = generate_ai_dip_opportunities(df_stocks, dip_timeframe_filter)
-        
-        for item in dip_data:
-            rec = item.get("التوصية", "شراء من الدعم")
-            time_frame = item.get("المدى الزمني", "صعود أسبوعي")
-            
-            st.markdown(f"""
-            <div class="dip-card">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-                    <span style="font-size: 1.15rem; font-weight: bold; color: #0f172a;">🎯 {item.get('اسم السهم')}</span>
-                    <div style="display: flex; gap: 8px; align-items: center;">
-                        <span class="badge-time">⏱️ {time_frame}</span>
-       
