@@ -26,7 +26,6 @@ st.caption(f"🔄 التحديث التلقائي مفعل (تحديث رقم: {
 # ---------------------------------------------------------
 api_key = st.secrets.get("GEMINI_API_KEY")
 
-# إظهار مربع الإدخال الجانبي كخيار احتياطي فقط إذا لم يتم ضبط المفتاح في Secrets
 if not api_key:
     api_key = st.sidebar.text_input("أدخل مفتاح Gemini API:", type="password")
 
@@ -103,7 +102,7 @@ def fetch_live_prices(tickers):
 if not api_key:
     st.warning("⚠️ لم يتم العثور على مفتاح API. برجاء إضافته في Secrets أو إدخاله في الشريط الجانبي لبدء التحليل.")
 else:
-    with st.spinner("⏳ جاري سحب الأسعار والأخبار اللحظية للأسهم الإسلامية المعتمدة..."):
+    with st.spinner("⏳ جاري سحب الأسعار والتحليل..."):
         df_prices = fetch_live_prices(VERIFIED_ISLAMIC_STOCKS)
         
         if df_prices.empty:
@@ -112,8 +111,11 @@ else:
             st.subheader("📊 الأسعار اللحظية للأسهم الإسلامية المعتمدة")
             st.dataframe(df_prices, use_container_width=True)
             
+            # تهيئة مفتاح Gemini
             genai.configure(api_key=api_key)
-            model = genai.GenerativeModel('gemini-2.5-flash')
+            
+            # استخدام الموديل المستقر المعتمد عالمياً
+            model = genai.GenerativeModel('gemini-1.5-flash')
             
             prompt = f"""
             أنت خبير ومحلل مالي متخصص حصرياً في "الأسهم المتوافقة مع الشريعة الإسلامية بالبورصة المصرية".
@@ -121,7 +123,7 @@ else:
             
             {df_prices.to_string(index=False)}
             
-            قم بالبحث اللحظي عن أحدث الأخبار والتحليلات لهذه الأسهم اليوم، وقدم تقريراً شاملاً بالترتيب التالي:
+            قدم تقريراً تحليلياً شاملاً بالترتيب التالي:
 
             1. **جدول التوصيات والفرص اللحظية:** 
                جدول منظّم للأسهم التي بها فرص إيجابية بالترتيب:
@@ -134,16 +136,17 @@ else:
                - سعر إيقاف الخسارة (Stop Loss)
 
             2. **نظرة عامة على السيولة والاتجاه:** ملخص حركات السيولة الموجهة للقطاعات الإسلامية في البورصة المصرية اليوم.
-            3. **تأثير الأخبار اللحظية:** أهم الأخبار والقرارات المؤثرة على الشركات المذكورة اليوم.
-            4. **أسهم تحت المراقبة / تحذيرات:** الأسهم التي تعاني من ضغط بيعي أو ضعف سيولة.
-            5. **توصية تنفيذية سريعة للمستثمر.**
+            3. **أسهم تحت المراقبة / تحذيرات:** الأسهم التي تعاني من ضغط بيعي أو ضعف سيولة.
+            4. **توصية تنفيذية سريعة للمستثمر.**
 
             ملاحظة صارمة: لا تذكر أي سهم تقليدي أو غير معتمد شرعياً في التقرير إطلاقاً.
             """
             
-            response = model.generate_content(prompt)
-            
-            st.markdown("---")
-            st.subheader("💡 التقرير التحليلي الموثوق للأسهم الإسلامية")
-            st.markdown(response.text)
-        
+            try:
+                response = model.generate_content(prompt)
+                st.markdown("---")
+                st.subheader("💡 التقرير التحليلي الموثوق للأسهم الإسلامية")
+                st.markdown(response.text)
+            except Exception as e:
+                st.error(f"حدث خطأ أثناء طلب التحليل من Gemini: {e}")
+               
