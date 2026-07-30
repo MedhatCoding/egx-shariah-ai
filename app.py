@@ -5,7 +5,6 @@ import pandas as pd
 import json
 import os
 
-# --- 1. إعدادات الصفحة بدون شريط جانبي ---
 st.set_page_config(
     page_title="محلل أسهم الشريعة الإسلامية - البورصة المصرية",
     page_icon="🟢",
@@ -13,27 +12,16 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# --- 2. تنسيق الواجهة ودعم اللغة العربية والموبايل ---
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&display=swap');
-    
     html, body, [class*="st-"] {
         font-family: 'Cairo', sans-serif !important;
         direction: rtl;
         text-align: right;
     }
-    
-    [data-testid="collapsedControl"] {
-        display: none !important;
-    }
-
-    .main-header {
-        text-align: center;
-        padding: 10px 0;
-        color: #1e293b;
-    }
-
+    [data-testid="collapsedControl"] { display: none !important; }
+    .main-header { text-align: center; padding: 10px 0; color: #1e293b; }
     .stock-card {
         background-color: #ffffff;
         border: 1px solid #e2e8f0;
@@ -42,22 +30,10 @@ st.markdown("""
         margin-bottom: 10px;
         box-shadow: 0 2px 4px rgba(0,0,0,0.03);
     }
-    
-    .stock-title {
-        font-size: 1rem;
-        font-weight: 700;
-        color: #0f172a;
-    }
-    
-    .stock-price {
-        font-size: 1.15rem;
-        font-weight: 700;
-        color: #0f172a;
-    }
-    
+    .stock-title { font-size: 1rem; font-weight: 700; color: #0f172a; }
+    .stock-price { font-size: 1.15rem; font-weight: 700; color: #0f172a; }
     .price-up { color: #16a34a; font-weight: bold; }
     .price-down { color: #dc2626; font-weight: bold; }
-
     .opp-card {
         background-color: #ffffff;
         border-right: 5px solid #2563eb;
@@ -69,7 +45,6 @@ st.markdown("""
         border-left: 1px solid #f1f5f9;
         border-bottom: 1px solid #f1f5f9;
     }
-
     .badge-buy-strong {
         background-color: #dcfce7;
         color: #15803d;
@@ -78,7 +53,6 @@ st.markdown("""
         font-size: 0.85rem;
         font-weight: bold;
     }
-
     .badge-buy {
         background-color: #e0f2fe;
         color: #0369a1;
@@ -87,7 +61,6 @@ st.markdown("""
         font-size: 0.85rem;
         font-weight: bold;
     }
-
     .badge-time {
         background-color: #f1f5f9;
         color: #475569;
@@ -96,7 +69,6 @@ st.markdown("""
         font-size: 0.75rem;
         font-weight: 600;
     }
-
     .stButton > button {
         border-radius: 8px;
         font-weight: bold;
@@ -106,15 +78,12 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# --- 3. إعداد نموذج Gemini مع حماية من الأخطاء ---
 def get_gemini_model():
     api_key = st.secrets.get("GEMINI_API_KEY") or os.getenv("GEMINI_API_KEY")
     if not api_key:
         st.error("⚠️ لم يتم العثور على GEMINI_API_KEY في Secrets أو متغيرات البيئة!")
         st.stop()
-    
     genai.configure(api_key=api_key)
-    
     for model_name in ['gemini-2.5-flash', 'gemini-1.5-flash', 'gemini-2.0-flash']:
         try:
             return genai.GenerativeModel(model_name)
@@ -122,7 +91,6 @@ def get_gemini_model():
             continue
     return genai.GenerativeModel('gemini-1.5-flash')
 
-# --- 4. قائمة الأسهم الشاملة ---
 SHARIAH_STOCKS = {
     "القاهرة للخدمات التعليمية": "CAED.CA",
     "شركة مستشفي كليوباترا": "CLHO.CA",
@@ -217,112 +185,118 @@ SHARIAH_STOCKS = {
     "سيدي كرير للبتروكيماويات": "SKPC.CA"
 }
 
-# --- دالة جلب البيانات السريعة ---
 @st.cache_data(ttl=180)
 def fetch_stocks_data():
     results = []
     for name, symbol in SHARIAH_STOCKS.items():
         try:
-            t = yf.Ticker(symbol)
-            hist = t.history(period="5d")
+            hist = yf.Ticker(symbol).history(period="5d")
             if not hist.empty and len(hist) >= 2:
-                current = hist['Close'].iloc[-1]
-                prev = hist['Close'].iloc[-2]
+                current = float(hist['Close'].iloc[-1])
+                prev = float(hist['Close'].iloc[-2])
                 change = current - prev
-                pct_change = (change / prev) * 100
-                high = hist['High'].max()
-                low = hist['Low'].min()
+                pct_change = (change / prev) * 100 if prev else 0
+                high = float(hist['High'].max())
+                low = float(hist['Low'].min())
             else:
                 current, change, pct_change, high, low = 15.0, 0.5, 1.2, 15.5, 14.5
-            
-            results.append({
-                "name": name,
-                "symbol": symbol.replace(".CA", ""),
-                "price": current,
-                "change": change,
-                "pct_change": pct_change,
-                "high": high,
-                "low": low
-            })
+            results.append({"name": name, "symbol": symbol.replace('.CA', ''), "price": current, "change": change, "pct_change": pct_change, "high": high, "low": low})
         except Exception:
             continue
     return pd.DataFrame(results)
 
-# --- تحليل الفرص بالذكاء الاصطناعي ---
 def generate_ai_opportunities(df_stocks, timeframe_filter):
     model = get_gemini_model()
-    
     seed_val = abs(hash(timeframe_filter)) % 1000
     df_shuffled = df_stocks.sample(frac=1, random_state=seed_val).reset_index(drop=True)
-    
-    stocks_summary = []
-    for _, row in df_shuffled.head(35).iterrows():
-        stocks_summary.append(
-            f"- {row['name']} ({row['symbol']}): السعر الحالي {row['price']:.2f} EGP، التغير {row['pct_change']:.2f}%، أعلى {row['high']:.2f}، أقل {row['low']:.2f}"
-        )
-    
+    stocks_summary = [f"- {r['name']} ({r['symbol']}): السعر الحالي {r['price']:.2f} EGP، التغير {r['pct_change']:.2f}%، أعلى {r['high']:.2f}، أقل {r['low']:.2f}" for _, r in df_shuffled.head(35).iterrows()]
     if timeframe_filter == "جميع المدى الزمني":
         time_instruction = "قم بتنويع الفرص ووضع مداه الزمني الخاص بكل سهم (مضاربة يومية، صعود أسبوعي، أو صعود شهري)."
     else:
         time_instruction = f"اجعل كل الفرص تتبع حصرياً المدى الزمني المحدد: [{timeframe_filter}]."
-
     prompt = f"""
-    أنت محلل فني محترف في البورصة المصرية (EGX).
-    {time_instruction}
-    
-    اختر من 4 إلى 5 أسهم مختلفة من القائمة التالية. 
-    أرجع النتيجة حتمياً بصيغة JSON فقط كقائمة بالشكل التالي دون أي مقدمات أو علامات markdown زائدة:
-    [
-      {{
-        "اسم السهم": "اسم السهم من القائمة بالضبط",
-        "التوصية": "شراء قوي",
-        "المدى الزمني": "حدد المدى الزمني المناسب للسهم",
-        "سعر الشراء": "35.50",
-        "السعر المستهدف": "42.00",
-        "وقف الخسارة": "33.00",
-        "أسباب التحليل": "اكتب هنا سبباً فنياً تفصيلياً وحقيقياً مدعماً بحركة السعر والزخم"
-      }}
-    ]
-    القائمة:
-    {chr(10).join(stocks_summary)}
-    """
+أنت محلل فني محترف في البورصة المصرية (EGX).
+{time_instruction}
+اختر من 4 إلى 5 أسهم مختلفة من القائمة التالية.
+أرجع النتيجة حتمياً بصيغة JSON فقط كقائمة بالشكل التالي دون أي مقدمات أو علامات markdown زائدة:
+[
+  {{
+    "اسم السهم": "اسم السهم من القائمة بالضبط",
+    "التوصية": "شراء قوي",
+    "المدى الزمني": "حدد المدى الزمني المناسب للسهم",
+    "سعر الشراء": "35.50",
+    "السعر المستهدف": "42.00",
+    "وقف الخسارة": "33.00",
+    "أسباب التحليل": "اكتب هنا سبباً فنياً تفصيلياً وحقيقياً مدعماً بحركة السعر والزخم"
+  }}
+]
+القائمة:
+{chr(10).join(stocks_summary)}
+"""
     try:
         response = model.generate_content(prompt)
         text = response.text.strip()
         if "```json" in text:
             text = text.split("```json")[1].split("```").strip()
         elif "```" in text:
-            text = text.split("```").split("```")[0].strip()
+            text = text.split("```")[1].split("```")[0].strip()
         return json.loads(text)
     except Exception:
         timings = ["مضاربة يومية", "صعود أسبوعي", "صعود شهري", "مضاربة يومية"]
-        reasons = [
-            "ارتفاع ملحوظ في السيولة اللحظية واقتراب السعر من اختبار مقاومة قوية تدعم الصعود السريع.",
-            "استقرار السعر فوق مناطق الدعم الرئيسية مع تشكل نموذج إيجابي على المدى القصير.",
-            "تجميع إيجابي واضح وتواجد فرص لنمو سعري تدريجي يستهدف مستويات أعلى خلال الفترة القادمة.",
-            "زخم شرائي مكثف يظهر بوضوح في الجلسات الأخيرة مع تحركات إيجابية لأعلى."
-        ]
+        reasons = ["ارتفاع ملحوظ في السيولة اللحظية واقتراب السعر من اختبار مقاومة قوية تدعم الصعود السريع.", "استقرار السعر فوق مناطق الدعم الرئيسية مع تشكل نموذج إيجابي على المدى القصير.", "تجميع إيجابي واضح وتواجد فرص لنمو سعري تدريجي يستهدف مستويات أعلى خلال الفترة القادمة.", "زخم شرائي مكثف يظهر بوضوح في الجلسات الأخيرة مع تحركات إيجابية لأعلى."]
         fallback_list = []
         for idx, (_, row) in enumerate(df_stocks.sample(4, random_state=seed_val).iterrows()):
             assigned_time = timings[idx % len(timings)] if timeframe_filter == "جميع المدى الزمني" else timeframe_filter
-            assigned_reason = reasons[idx % len(reasons)]
-            fallback_list.append({
-                "اسم السهم": row['name'],
-                "التوصية": "شراء",
-                "المدى الزمني": assigned_time,
-                "سعر الشراء": f"{row['price']:.2f}",
-                "السعر المستهدف": f"{(row['price'] * 1.08):.2f}",
-                "وقف الخسارة": f"{(row['price'] * 0.96):.2f}",
-                "أسباب التحليل": assigned_reason
-            })
+            fallback_list.append({"اسم السهم": row['name'], "التوصية": "شراء", "المدى الزمني": assigned_time, "سعر الشراء": f"{row['price']:.2f}", "السعر المستهدف": f"{(row['price'] * 1.08):.2f}", "وقف الخسارة": f"{(row['price'] * 0.96):.2f}", "أسباب التحليل": reasons[idx % len(reasons)]})
         return fallback_list
 
-# --- واجهة التطبيق ---
+def generate_ai_rebound_opportunities(df_stocks, timeframe_filter):
+    model = get_gemini_model()
+    seed_val = abs(hash("rebound-" + timeframe_filter)) % 1000
+    df_down = df_stocks.sort_values(by="pct_change", ascending=True).reset_index(drop=True)
+    stocks_summary = [f"- {r['name']} ({r['symbol']}): السعر الحالي {r['price']:.2f} EGP، التغير {r['pct_change']:.2f}%، أعلى {r['high']:.2f}، أقل {r['low']:.2f}" for _, r in df_down.head(35).iterrows()]
+    if timeframe_filter == "جميع المدى الزمني":
+        time_instruction = "اختر الأسهم الهابطة القابلة للارتداد، ويمكن تنويعها بين يومي وأسبوعي وشهري قصير."
+    else:
+        time_instruction = f"اجعل كل الفرص تتبع حصرياً المدى الزمني المحدد: [{timeframe_filter}]."
+    prompt = f"""
+أنت محلل فني محترف في البورصة المصرية (EGX).
+{time_instruction}
+اختر من 4 إلى 5 أسهم من الأسهم الهابطة فقط، لكن التي لديها فرصة ارتداد فني حقيقية.
+أرجع النتيجة حتمياً بصيغة JSON فقط كقائمة بالشكل التالي دون أي مقدمات أو علامات markdown زائدة:
+[
+  {{
+    "اسم السهم": "اسم السهم من القائمة بالضبط",
+    "التوصية": "ارتداد محتمل",
+    "المدى الزمني": "حدد المدى الزمني المناسب للسهم",
+    "سعر الشراء": "35.50",
+    "السعر المستهدف": "42.00",
+    "وقف الخسارة": "33.00",
+    "أسباب التحليل": "سبب فني حقيقي يوضح لماذا السهم مرشح لارتداد من الدعم أو تماسك بعد هبوط"
+  }}
+]
+القائمة:
+{chr(10).join(stocks_summary)}
+"""
+    try:
+        response = model.generate_content(prompt)
+        text = response.text.strip()
+        if "```json" in text:
+            text = text.split("```json")[1].split("```").strip()
+        elif "```" in text:
+            text = text.split("```")[1].split("```")[0].strip()
+        return json.loads(text)
+    except Exception:
+        fallback_list = []
+        for _, row in enumerate(df_down.head(4).iterrows()):
+            fallback_list.append({"اسم السهم": row[1]['name'], "التوصية": "ارتداد محتمل", "المدى الزمني": timeframe_filter if timeframe_filter != "جميع المدى الزمني" else "مضاربة يومية", "سعر الشراء": f"{row[1]['price']:.2f}", "السعر المستهدف": f"{(row[1]['price'] * 1.06):.2f}", "وقف الخسارة": f"{(row[1]['price'] * 0.95):.2f}", "أسباب التحليل": "هبوط ملحوظ مع اقتراب من منطقة دعم قد تسمح برد فعل سعري صاعد إذا ظهرت سيولة شرائية."})
+        return fallback_list
+
 st.markdown('<h1 class="main-header">📈 أسهم الشريعة الإسلامية - البورصة المصرية</h1>', unsafe_allow_html=True)
 
 col_info, col_btn = st.columns([3, 1])
 with col_info:
-    st.write("أكثر 5 أسهم ارتفاعاً في قائمتك، وتحليل ذكي للفرص حسب المدى الزمني.")
+    st.write("أكثر 5 أسهم ارتفاعاً في قائمتك، وفرص صعود، وفرص ارتداد من الهبوط حسب المدى الزمني.")
 with col_btn:
     if st.button("🔄 تحديث البيانات", use_container_width=True):
         st.cache_data.clear()
@@ -331,16 +305,12 @@ with col_btn:
 with st.spinner("جاري جلب الأسعار اللحظية لقائمتك..."):
     df_stocks = fetch_stocks_data()
 
-# 1. عرض أكثر 5 أسهم ارتفاعاً من قائمتك
 st.subheader("🔥 أكثر 5 أسهم ارتفاعاً في قائمتك")
-
 if not df_stocks.empty:
     top_gainers = df_stocks.sort_values(by="pct_change", ascending=False).head(5)
-    
     for _, item in top_gainers.iterrows():
         change_class = "price-up" if item['pct_change'] >= 0 else "price-down"
         sign = "+" if item['pct_change'] >= 0 else ""
-        
         st.markdown(f"""
         <div class="stock-card">
             <div style="display: flex; justify-content: space-between; align-items: center;">
@@ -357,12 +327,9 @@ else:
     st.warning("جاري تحضير البيانات، اضغط تحديث إذا استمرت المشكلة.")
 
 st.markdown("---")
-
-# 2. قسم الفرص من قائمتك مع الفلتر والتحديث الفوري
 col_opp_title, col_filter = st.columns([2, 2])
 with col_opp_title:
     st.subheader("🌟 أفضل الفرص الاستثمارية الموصى بها")
-
 with col_filter:
     timeframe_filter = st.selectbox(
         "فلتر حسب المدى الزمني للفرصة:",
@@ -373,24 +340,17 @@ with col_filter:
 if not df_stocks.empty:
     with st.spinner("جاري تحليل أسهم قائمتك وتصنيف الفرص..."):
         opp_data = generate_ai_opportunities(df_stocks, timeframe_filter)
-        
         for item in opp_data:
             rec = item.get("التوصية", "شراء")
             time_frame = item.get("المدى الزمني", "صعود أسبوعي")
             stock_name = item.get("اسم السهم")
             stock_row = df_stocks[df_stocks["name"] == stock_name]
-
-            live_price = None
-            live_change = None
-            if not stock_row.empty:
-                live_price = float(stock_row.iloc[0]["price"])
-                live_change = float(stock_row.iloc[0]["pct_change"])
-
+            live_price = float(stock_row.iloc[0]["price"]) if not stock_row.empty else None
+            live_change = float(stock_row.iloc[0]["pct_change"]) if not stock_row.empty else None
             badge_class = "badge-buy-strong" if "قوي" in rec else ("badge-buy" if "شراء" in rec else "badge-hold")
             border_color = "#16a34a" if "قوي" in rec else ("#2563eb" if "شراء" in rec else "#d97706")
             live_price_text = f"{live_price:.2f} EGP" if live_price is not None else "غير متاح"
             live_change_text = f"({live_change:+.2f}%)" if live_change is not None else ""
-
             st.markdown(f"""
             <div class="opp-card" style="border-right-color: {border_color};">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
@@ -423,3 +383,32 @@ if not df_stocks.empty:
                 </div>
             </div>
             """, unsafe_allow_html=True)
+
+st.markdown("---")
+st.subheader("🟦 فرص الارتداد من الهبوط")
+
+if not df_stocks.empty:
+    down_candidates = df_stocks[df_stocks["pct_change"] < 0].sort_values(by="pct_change", ascending=True)
+    if not down_candidates.empty:
+        with st.spinner("جاري تحليل الأسهم الهابطة القابلة للارتداد..."):
+            rebound_data = generate_ai_rebound_opportunities(down_candidates, timeframe_filter)
+            for item in rebound_data:
+                rec = item.get("التوصية", "ارتداد محتمل")
+                time_frame = item.get("المدى الزمني", "مضاربة يومية")
+                stock_name = item.get("اسم السهم")
+                stock_row = df_stocks[df_stocks["name"] == stock_name]
+                live_price = float(stock_row.iloc[0]["price"]) if not stock_row.empty else None
+                live_change = float(stock_row.iloc[0]["pct_change"]) if not stock_row.empty else None
+                live_price_text = f"{live_price:.2f} EGP" if live_price is not None else "غير متاح"
+                live_change_text = f"({live_change:+.2f}%)" if live_change is not None else ""
+                st.markdown(f"""
+                <div class="opp-card" style="border-right-color: #7c3aed;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                        <span style="font-size: 1.15rem; font-weight: bold; color: #0f172a;">🟦 {stock_name}</span>
+                        <div style="display: flex; gap: 8px; align-items: center;">
+                            <span class="badge-time">⏱️ {time_frame}</span>
+                            <span class="badge-buy" style="background-color:#ede9fe;color:#6d28d9;">{rec}</span>
+                        </div>
+                    </div>
+                    <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; background-color: #f8fafc; padding: 10px; border-radius: 8px; text-align: center; margin-bottom: 10px;">
+                        <div
