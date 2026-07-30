@@ -24,7 +24,6 @@ st.markdown("""
         text-align: right;
     }
     
-    /* إخفاء أيقونة الشريط الجانبي تماماً */
     [data-testid="collapsedControl"] {
         display: none !important;
     }
@@ -84,7 +83,6 @@ def get_gemini_model():
     
     genai.configure(api_key=api_key)
     
-    # تجربة الموديلات المتاحة لتجنب خطأ NotFound
     for model_name in ['gemini-2.5-flash', 'gemini-1.5-flash', 'gemini-2.0-flash']:
         try:
             return genai.GenerativeModel(model_name)
@@ -163,10 +161,10 @@ def generate_ai_opportunities(df_stocks):
     [
       {{
         "اسم السهم": "اسم السهم",
-        "التوصية": "شراء قوي" أو "شراء" أو "احتفاظ",
-        "سعر الشراء": "مثال: 35.50",
-        "السعر المستهدف": "مثال: 42.00",
-        "وقف الخسارة": "مثال: 33.00",
+        "التوصية": "شراء قوي أو شراء أو احتفاظ",
+        "سعر الشراء": "35.50",
+        "السعر المستهدف": "42.00",
+        "وقف الخسارة": "33.00",
         "أسباب التحليل": "شرح فني وأساسي مختصر لسبب الاختيار"
       }}
     ]
@@ -175,13 +173,15 @@ def generate_ai_opportunities(df_stocks):
     try:
         response = model.generate_content(prompt)
         text = response.text.strip()
-        if text.startswith("
-```json"):
-            text = text.replace("
-```json", "").replace("```", "").strip()
+        
+        # تنظيف النص من علامات التنسيق الخاصة بـ Markdown
+        if "```json" in text:
+            text = text.split("```json")[1].split("```")[0].strip()
+        elif "```" in text:
+            text = text.split("```")[1].split("```")[0].strip()
+            
         return json.loads(text)
     except Exception:
-        # جدول احتياطي في حال وجود خطأ في تحليل الـ JSON
         opportunities = []
         for _, row in df_stocks.iterrows():
             if row['price'] > 0:
@@ -262,4 +262,3 @@ if not df_stocks.empty:
                 "أسباب التحليل": st.column_config.TextColumn("أسباب التحليل والفرصة", width="large"),
             }
 )
-        
