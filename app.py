@@ -111,11 +111,11 @@ else:
             st.subheader("📊 الأسعار اللحظية للأسهم الإسلامية المعتمدة")
             st.dataframe(df_prices, use_container_width=True)
             
-            # تهيئة مفتاح Gemini
             genai.configure(api_key=api_key)
             
-            # استخدام الموديل المستقر المعتمد عالمياً
-            model = genai.GenerativeModel('gemini-1.5-flash')
+            # تجربة الموديلات المتاحة أوتوماتيكياً لضمان عدم حدوث خطأ 404
+            model_name = 'gemini-1.5-flash-latest'
+            model = genai.GenerativeModel(model_name)
             
             prompt = f"""
             أنت خبير ومحلل مالي متخصص حصرياً في "الأسهم المتوافقة مع الشريعة الإسلامية بالبورصة المصرية".
@@ -148,5 +148,12 @@ else:
                 st.subheader("💡 التقرير التحليلي الموثوق للأسهم الإسلامية")
                 st.markdown(response.text)
             except Exception as e:
-                st.error(f"حدث خطأ أثناء طلب التحليل من Gemini: {e}")
-               
+                # محاولة احتياطية بموديل gemini-pro في حال التعثر
+                try:
+                    fallback_model = genai.GenerativeModel('gemini-pro')
+                    response = fallback_model.generate_content(prompt)
+                    st.markdown("---")
+                    st.subheader("💡 التقرير التحليلي الموثوق للأسهم الإسلامية")
+                    st.markdown(response.text)
+                except Exception as ex:
+                    st.error(f"حدث خطأ أثناء طلب التحليل من Gemini: {ex}")
