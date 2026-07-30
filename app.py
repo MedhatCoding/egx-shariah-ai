@@ -81,7 +81,7 @@ else:
             
             # ب. إرسال البيانات للذكاء الاصطناعي للتحليل
             genai.configure(api_key=api_key)
-            model = genai.GenerativeModel('gemini-1.5-flash')
+            model = genai.GenerativeModel('gemini-2.5-flash')
             
             prompt = f"""
             أنت محلل مالي وخبير استثماري محترف في البورصة المصرية متكفّل بـ مؤشر الشريعة (EGX33).
