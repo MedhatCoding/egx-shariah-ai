@@ -182,17 +182,42 @@ else:
     st.markdown("---")
     
     # ---------------------------------------------------------
-    # 7. زر التحليل الذكي (تم تعديل اسم الموديل إلى gemini-1.5-flash)
+    # 7. زر التحليل الذكي (بحث ديناميكي عن الموديل المتاح)
     # ---------------------------------------------------------
     if st.button("✨ استخراج التقرير والتحليل الذكي للأسهم"):
         if not api_key:
             st.warning("⚠️ برجاء إدخال مفتاح Gemini API في الشريط الجانبي أو في Secrets.")
         else:
-            with st.spinner("🧠 جاري تحليل البيانات وصياغة التوصيات..."):
+            with st.spinner("🧠 جاري الاتصال بالذكاء الاصطناعي وصياغة التوصيات..."):
                 try:
                     genai.configure(api_key=api_key)
-                    # تعديل اسم الموديل ليكون شغال ومستقر 100%
-                    model = genai.GenerativeModel('gemini-1.5-flash')
+                    
+                    # اختيار الموديل تلقائياً من الموديلات المتاحة في الحساب
+                    available_models = []
+                    try:
+                        for m in genai.list_models():
+                            if 'generateContent' in m.supported_generation_methods:
+                                available_models.append(m.name)
+                    except Exception:
+                        pass
+
+                    # تحديد اسم الموديل المناسب
+                    selected_model_name = None
+                    # الترتيب المفضّل
+                    preferred_names = ['models/gemini-1.5-flash', 'models/gemini-1.5-pro', 'gemini-1.5-flash', 'gemini-pro']
+                    
+                    for pref in preferred_names:
+                        if pref in available_models:
+                            selected_model_name = pref
+                            break
+                    
+                    # إذا لم يجده في القائمة، يأخذ أول موديل يدعم generateContent
+                    if not selected_model_name and available_models:
+                        selected_model_name = available_models[0]
+                    elif not selected_model_name:
+                        selected_model_name = 'gemini-1.5-flash'
+
+                    model = genai.GenerativeModel(selected_model_name)
                     
                     prompt = f"""
                     أنت خبير ومحلل مالي متخصص حصرياً في الأسهم المتوافقة مع الشريعة الإسلامية بالبورصة المصرية (EGX Shariah).
@@ -231,4 +256,3 @@ else:
         st.success("تم إعداد التقرير بنجاح!")
         st.subheader("💡 التقرير التحليلي الشامل")
         st.markdown(st.session_state['latest_report'])
-                  
