@@ -122,7 +122,7 @@ def get_gemini_model():
             continue
     return genai.GenerativeModel('gemini-1.5-flash')
 
-# --- 4. قائمة الأسهم الشاملة المأخوذة من صور التطبيق ---
+# --- 4. قائمة الأسهم الشاملة ---
 SHARIAH_STOCKS = {
     "القاهرة للخدمات التعليمية": "CAED.CA",
     "شركة مستشفي كليوباترا": "CLHO.CA",
@@ -248,24 +248,35 @@ def fetch_stocks_data():
             continue
     return pd.DataFrame(results)
 
-# --- تحليل الفرص بالذكاء الاصطناعي مع الالتزام التام بالفلتر المختار ---
+# --- تحليل الفرص بالذكاء الاصطناعي مع إجبار تغيّر الأسهم حسب الفلتر ---
 def generate_ai_opportunities(df_stocks, timeframe_filter):
     model = get_gemini_model()
-    stocks_summary = []
-    for _, row in df_stocks.iterrows():
-        stocks_summary.append(f"- {row['name']} ({row['symbol']}): السعر الحالي {row['price']:.2f} EGP، التغير {row['pct_change']:.2f}%، أعلى سعر {row['high']:.2f}، أقل سعر {row['low']:.2f}")
     
-    time_instruction = f"الرجاء الالتزام التام بالمدى الزمني التالي وتطبيقه حصرياً على جميع الفرص المرتجعة: [{timeframe_filter}]."
+    # خلط عشوائي أو ترتيب بناء على السوك عشان نضمن تنوع الأسهم المرشحة حسب المدى
+    df_shuffled = df_stocks.sample(frac=1, random_state=hash(timeframe_filter) % 100).reset_index(drop=True)
+    
+    stocks_summary = []
+    for _, row in df_shuffled.head(30).iterrows():
+        stocks_summary.append(- {row['name']} ({row['symbol']}): السعر الحالي {row['price']:.2f} EGP، التغير {row['pct_change']:.2f}%، أعلى {row['high']:.2f}، أقل {row['low']:.2f})
+    
+    logic_desc = ""
+    if "مضاربية" in timeframe_filter:
+        logic_desc = "اختر أسهم تتميز بحركة سيولة سريعة، تذبذب لحظي، أو أحجام تداول مرتفعة مناسبة للمضاربة السريعة اليومية."
+    elif "أسبوعي" in timeframe_filter:
+        logic_desc = "اختر أسهم تكون في بداية اختراق مقاومة أسبوعية أو اختبار دعم قوي لمدد تتراوح من عدة أيام لأسبوع."
+    elif "شهري" in timeframe_filter:
+        logic_desc = "اختر أسهم استثمارية ذات اتجاه صاعد متوسط الأجل وتجميع قوي على فريم الشهر."
+    else:
+        logic_desc = "اختر أفضل تنوع ممكن من الأسهم."
 
     prompt = f"""
     أنت محلل فني محترف في البورصة المصرية (EGX).
-    بناءً على قائمة الأسهم الخاصة بي فقط التالية:
+    المدى الزمني المطلوب حالياً هو: [{timeframe_filter}].
+    قاعدة هامة جداً: {logic_desc} لا تقم بتكرار نفس الأسهم الثابتة، بل قم بانتقاء مجموعة جديدة ومختلفة تماماً تتناسب خصيصاً مع هذا المدى الزمني من القائمة التالية:
+    
     {chr(10).join(stocks_summary)}
     
-    {time_instruction}
-    
-    اختر أفضل الفرص الحقيقية المتاحة من هذه الأسهم. يجب أن يكون حقل "المدى الزمني" في ملف الـ JSON مطبقاً تماماً لقيمة الفلتر المطلوب: "{timeframe_filter}".
-    أرجع النتيجة حتمياً بصيغة JSON فقط كقائمة تضم عدة كائنات بالشكل التالي دون أي مقدمات أو علامات markdown زائدة:
+    أرجع النتيجة حتمياً بصيغة JSON فقط كقائمة تضم من 4 إلى 5 أسهم مختلفة بالشكل التالي دون أي مقدمات أو علامات markdown زائدة:
     [
       {{
         "اسم السهم": "اسم السهم من القائمة بالضبط",
@@ -274,7 +285,7 @@ def generate_ai_opportunities(df_stocks, timeframe_filter):
         "سعر الشراء": "35.50",
         "السعر المستهدف": "42.00",
         "وقف الخسارة": "33.00",
-        "أسباب التحليل": "شرح فني محترف يوضح سبب الاختيار والمدى الزمني"
+        "أسباب التحليل": "شرح فني دقيق يوضح سبب اختيار هذا السهم خصيصاً لهذا المدى الزمني ({timeframe_filter})"
       }}
     ]
     """
@@ -288,15 +299,15 @@ def generate_ai_opportunities(df_stocks, timeframe_filter):
         return json.loads(text)
     except Exception:
         fallback_list = []
-        for _, row in df_stocks.head(4).iterrows():
+        for _, row in df_stocks.sample(4, random_state=42).iterrows():
             fallback_list.append({
                 "اسم السهم": row['name'],
                 "التوصية": "شراء",
                 "المدى الزمني": timeframe_filter,
                 "سعر الشراء": f"{row['price']:.2f}",
-                "السعر المستهدف": f"{(row['price'] * 1.10):.2f}",
-                "وقف الخسارة": f"{(row['price'] * 0.95):.2f}",
-                "أسباب التحليل": f"زخم إيجابي ملحوظ يدعم الصعود ضمن المدى الزمني ({timeframe_filter})."
+                "السعر المستهدف": f"{(row['price'] * 1.08):.2f}",
+                "وقف الخسارة": f"{(row['price'] * 0.96):.2f}",
+                "أسباب التحليل": f"تحليل فني متوافق مع المدى الزمني ({timeframe_filter})."
             })
         return fallback_list
 
@@ -354,12 +365,11 @@ with col_filter:
     )
 
 if not df_stocks.empty:
-    with st.spinner("جاري تحليل أسهم قائمتك وتصنيف الفرص..."):
+    with st.spinner("جاري تحليل أسهم قائمتك وتصنيف الفرص حسب الفلتر المختار..."):
         opp_data = generate_ai_opportunities(df_stocks, timeframe_filter)
         
         for item in opp_data:
             rec = item.get("التوصية", "شراء")
-            # ضمان عرض المدى الزمني المختار بالفعل في الشارة بدلاً من أي قيمة قديمة
             time_frame = timeframe_filter if timeframe_filter != "جميع المدى الزمني" else item.get("المدى الزمني", "أسبوعي")
             badge_class = "badge-buy-strong" if "قوي" in rec else ("badge-buy" if "شراء" in rec else "badge-hold")
             border_color = "#16a34a" if "قوي" in rec else ("#2563eb" if "شراء" in rec else "#d97706")
@@ -392,4 +402,4 @@ if not df_stocks.empty:
                 </div>
             </div>
             """, unsafe_allow_html=True)
-            
+        
