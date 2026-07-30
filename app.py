@@ -252,12 +252,11 @@ def fetch_stocks_data():
 def generate_ai_opportunities(df_stocks, timeframe_filter):
     model = get_gemini_model()
     
-    # خلط عشوائي أو ترتيب بناء على السوك عشان نضمن تنوع الأسهم المرشحة حسب المدى
     df_shuffled = df_stocks.sample(frac=1, random_state=hash(timeframe_filter) % 100).reset_index(drop=True)
     
     stocks_summary = []
     for _, row in df_shuffled.head(30).iterrows():
-        stocks_summary.append(- {row['name']} ({row['symbol']}): السعر الحالي {row['price']:.2f} EGP، التغير {row['pct_change']:.2f}%، أعلى {row['high']:.2f}، أقل {row['low']:.2f})
+        stocks_summary.append(f"- {row['name']} ({row['symbol']}): السعر الحالي {row['price']:.2f} EGP، التغير {row['pct_change']:.2f}%، أعلى {row['high']:.2f}، أقل {row['low']:.2f}")
     
     logic_desc = ""
     if "مضاربية" in timeframe_filter:
@@ -402,4 +401,4 @@ if not df_stocks.empty:
                 </div>
             </div>
             """, unsafe_allow_html=True)
-        
+            
