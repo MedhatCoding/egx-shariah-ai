@@ -1,159 +1,158 @@
 import streamlit as st
+import yfinance as yf
+import google.generativeai as genai
 import pandas as pd
-import requests
-from bs4 import BeautifulSoup
-from concurrent.futures import ThreadPoolExecutor
-from google import genai
+from streamlit_autorefresh import st_autorefresh
 
 # ---------------------------------------------------------
 # 1. إعدادات الصفحة
 # ---------------------------------------------------------
 st.set_page_config(
-    page_title="منصة الأسهم الإسلامية | EGX Shariah",
+    page_title="محلل الأسهم الإسلامية المعتمدة - البورصة المصرية",
     page_icon="🕌",
-    layout="wide"
+    layout="centered"
 )
 
-st.title("🕌 منصة تحليل الأسهم الإسلامية (EGX Shariah)")
-st.caption("متابعة لحظية ومحلل ذكي لأهم الأسهم المعتمدة شرعياً بالبورصة المصرية")
+# ---------------------------------------------------------
+# 2. التحديث الأوتوماتيكي للأسعار فقط (كل 60 ثانية)
+# ---------------------------------------------------------
+count = st_autorefresh(interval=60 * 1000, key="datarefreshcounter")
+
+st.title("🕌 محلل الأسهم الإسلامية المعتمدة")
+st.caption(f"🔄 أسعار البورصة تتحدث تلقائياً (تحديث رقم: {count}) | قائمة محققة ومطابقة للمعايير الشرعية")
 
 # ---------------------------------------------------------
-# 2. مفتاح API
+# 3. جلب مفتاح Gemini API أوتوماتيكياً من Secrets
 # ---------------------------------------------------------
 api_key = st.secrets.get("GEMINI_API_KEY")
+
 if not api_key:
-    api_key = st.sidebar.text_input("🔑 أدخل مفتاح Gemini API الخاص بك:", type="password")
+    api_key = st.sidebar.text_input("أدخل مفتاح Gemini API:", type="password")
 
 # ---------------------------------------------------------
-# 3. قائمة الأسهم الإسلامية
+# 4. القائمة الشاملة للأسهم المتوافقة مع الشريعة (الأزهر + AAOIFI)
 # ---------------------------------------------------------
-ISLAMIC_STOCKS = [
-    {"name": "مصرف أبوظبي الإسلامي", "symbol": "ADIB"},
-    {"name": "بنك البركة مصر", "symbol": "SAUD"},
-    {"name": "بنك فيصل الإسلامي", "symbol": "FAIT"},
-    {"name": "أموك للزيوت", "symbol": "AMOC"},
-    {"name": "أبوقير للأسمدة", "symbol": "ABUK"},
-    {"name": "موبكو للأسمدة", "symbol": "MFPC"},
-    {"name": "سيدي كرير للبتروكيماويات", "symbol": "SKPC"},
-    {"name": "مجموعة طلعت مصطفى", "symbol": "TMGH"},
-    {"name": "مصر الجديدة للإسكان", "symbol": "HELI"},
-    {"name": "مدينة مصر للإسكان", "symbol": "MASR"},
-    {"name": "بالم هيلز للتعمير", "symbol": "PHDC"},
-    {"name": "السويدي إليكتريك", "symbol": "SWDY"},
-    {"name": "حديد عز", "symbol": "ESRS"},
-    {"name": "المصرية للاتصالات", "symbol": "ETEL"},
-    {"name": "فوري للمدفوعات", "symbol": "FWRY"},
-    {"name": "ابن سينا فارما", "symbol": "ISPH"},
-    {"name": "رميدا للأدوية", "symbol": "RMDA"},
-    {"name": "سبيد ميديكال", "symbol": "SPMD"}
+VERIFIED_ISLAMIC_STOCKS = [
+    # قطاع البنوك والخدمات المالية الإسلامية
+    "ADIB.CA", # مصرف أبوظبي الإسلامي
+    "SAUD.CA", # بنك البركة مصر
+    
+    # قطاع البتروكيماويات والأسمدة والغاز
+    "AMOC.CA", # الإسكندرية للزيوت المعدنية (أموك)
+    "ABUK.CA", # أبوقير للأسمدة
+    "MFPC.CA", # مصر لإنتاج الأسمدة (موبكو)
+    "SKPC.CA", # سيدي كرير للبتروكيماويات
+    "KABO.CA", # النصر للملابس والمنسوجات
+    
+    # قطاع العقارات والتطوير العمراني
+    "TMGH.CA", # مجموعة طلعت مصطفى
+    "HELI.CA", # مصر الجديدة للإسكان والتعمير
+    "ORAS.CA", # أوراسكوم للإنشاءات
+    "PHDC.CA", # بالم هيلز للتعمير
+    "OCDI.CA", # 6 أكتوبر للتنمية والاستثمار (سوديك)
+    "AMER.CA", # عامر جروب
+    
+    # قطاع الصناعة والتصنيع والأغذية
+    "SWDY.CA", # السويدي إليكتريك
+    "ESRS.CA", # حديد عز
+    "JUFO.CA", # جهينة للصناعات الغذائية
+    "DOMH.CA", # دومتي
+    "ORWE.CA", # النساجون الشرقيون
+    "ALCN.CA", # الإسكندرية لتداول البضائع
+    "EGAL.CA", # مصر للألومنيوم
+    "MCQE.CA", # مصر بني سويف للأسمنت
+    
+    # قطاع الاتصالات، التكنولوجيا والأدوية
+    "ETEL.CA", # المصرية للاتصالات
+    "ISPH.CA", # ابن سينا فارما
+    "RMDA.CA", # العاشرة من رمضان (رميدا)
+    "FWRY.CA", # فوري تكنولوجيا البنوك
+    "RAYA.CA"  # راية القابضة
 ]
 
 # ---------------------------------------------------------
-# 4. محرك جلب الأسعار المباشر (بدون yfinance)
+# 5. دالة جلب الأسعار اللحظية أوتوماتيكياً
 # ---------------------------------------------------------
-def fetch_stock_direct(stock):
-    symbol = stock["symbol"]
-    url = f"https://www.mubasher.info/markets/EGX/stocks/{symbol}"
-    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
-    
-    try:
-        response = requests.get(url, headers=headers, timeout=5)
-        if response.status_code == 200:
-            soup = BeautifulSoup(response.text, 'html.parser')
-            
-            # محاولة قراءة السعر والتغير
-            price_elem = soup.find('span', {'class': 'market-summary__last-price'})
-            change_elem = soup.find('span', {'class': 'market-summary__change'})
-            
-            price = float(price_elem.text.strip()) if price_elem else 0.0
-            change = float(change_elem.text.strip().replace('%', '')) if change_elem else 0.0
-            
-            return {
-                "الشركة": stock["name"],
-                "الرمز": symbol,
-                "السعر (ج.م)": price,
-                "التغير %": change
-            }
-    except Exception:
-        pass
-    
-    return {
-        "الشركة": stock["name"],
-        "الرمز": symbol,
-        "السعر (ج.م)": "مباشر",
-        "التغير %": 0.0
-    }
-
-def get_all_prices():
-    results = []
-    with ThreadPoolExecutor(max_workers=10) as executor:
-        futures = [executor.submit(fetch_stock_direct, s) for s in ISLAMIC_STOCKS]
-        for f in futures:
-            res = f.result()
-            if res:
-                results.append(res)
-    return pd.DataFrame(results)
-
-# ---------------------------------------------------------
-# 5. عرض البيانات
-# ---------------------------------------------------------
-if st.button("🔄 تحديث الأسعار الآن"):
-    st.session_state['df_data'] = get_all_prices()
-
-if 'df_data' not in st.session_state:
-    st.session_state['df_data'] = get_all_prices()
-
-df = st.session_state['df_data']
-st.dataframe(df, use_container_width=True, hide_index=True)
-
-st.markdown("---")
-
-# ---------------------------------------------------------
-# 6. الذكاء الاصطناعي
-# ---------------------------------------------------------
-if st.button("✨ استخراج التقرير والتحليل الذكي"):
-    if not api_key:
-        st.warning("⚠️ يرجى أدخال مفتاح GEMINI_API_KEY أولاً.")
-    else:
-        with st.spinner("🧠 جاري إعداد التقرير بواسطة الذكاء الاصطناعي..."):
-            try:
-                client = genai.Client(api_key=api_key)
+@st.cache_data(ttl=30)
+def fetch_live_prices(tickers):
+    data_list = []
+    for ticker in tickers:
+        try:
+            stock = yf.Ticker(ticker)
+            hist = stock.history(period="2d")
+            if not hist.empty:
+                last_price = hist['Close'].iloc[-1]
+                prev_price = hist['Close'].iloc[-2] if len(hist) > 1 else last_price
+                change_percent = ((last_price - prev_price) / prev_price) * 100
+                volume = hist['Volume'].iloc[-1]
                 
-                # اختيار الموديل المتاح تلقائياً من الحساب
-                models_list = list(client.models.list())
-                chosen_model = None
-                for m in models_list:
-                    name = getattr(m, 'name', str(m))
-                    if 'flash' in name.lower():
-                        chosen_model = name
-                        break
-                if not chosen_model and models_list:
-                    chosen_model = getattr(models_list[0], 'name', str(models_list[0]))
+                data_list.append({
+                    "الرمز": ticker.replace(".CA", ""),
+                    "السعر الحالي": round(last_price, 2),
+                    "التغير %": round(change_percent, 2),
+                    "حجم التداول": volume
+                })
+        except Exception:
+            continue
+    return pd.DataFrame(data_list)
 
-                table_text = df.to_string(index=False)
-                
-                prompt = f"""
-                أنت محلل مالي خبير للأسهم الإسلامية بالبورصة المصرية.
-                بيانات الأسهم الحالية:
-                {table_text}
+# ---------------------------------------------------------
+# 6. جلب الأسعار وعرضها
+# ---------------------------------------------------------
+df_prices = fetch_live_prices(VERIFIED_ISLAMIC_STOCKS)
 
-                المطلوب:
-                1. جدول بأهم الفرص الشرائية (الشركة، الرمز، سعر الدخول، المستهدف، وقف الخسارة).
-                2. ملخص للسيولة ونصحية استثمارية سريعة.
-                """
-
-                response = client.models.generate_content(
-                    model=chosen_model,
-                    contents=prompt
-                )
-
-                st.session_state['report_text'] = response.text
-                st.rerun()
-
-            except Exception as err:
-                st.error(f"حدث خطأ أثناء طلب التقرير: {err}")
-
-if 'report_text' in st.session_state:
-    st.success("تم التقرير بنجاح! 🎯")
-    st.markdown(st.session_state['report_text'])
+if df_prices.empty:
+    st.error("تعذر جلب البيانات اللحظية، تأكد من اتصال الإنترنت أو وقت جلسة التداول.")
+else:
+    st.subheader("📊 الأسعار اللحظية للأسهم الإسلامية المعتمدة")
+    st.dataframe(df_prices, use_container_width=True)
     
+    st.markdown("---")
+    
+    # ---------------------------------------------------------
+    # 7. زر توليد التقرير التحليلي عند الطلب (لتوفير الكوتا)
+    # ---------------------------------------------------------
+    if st.button("💡 توليد التقرير والتحليل الذكي للأسهم الآن", type="primary"):
+        if not api_key:
+            st.warning("⚠️ لم يتم العثور على مفتاح API. برجاء إضافته في Secrets أو إدخاله في الشريط الجانبي.")
+        else:
+            with st.spinner("⏳ جاري تحليل الأسهم وإعداد التوصيات..."):
+                try:
+                    genai.configure(api_key=api_key)
+                    model = genai.GenerativeModel('gemini-2.5-flash')
+                    
+                    prompt = f"""
+                    أنت خبير ومحلل مالي متخصص حصرياً في "الأسهم المتوافقة مع الشريعة الإسلامية بالبورصة المصرية".
+                    أمامك البيانات السعرية اللحظية لأسهم الشركات المعتمدة شرعياً فقط والمتاحة الآن:
+                    
+                    {df_prices.to_string(index=False)}
+                    
+                    قدم تقريراً تحليلياً شاملاً بالترتيب التالي:
+
+                    1. **جدول التوصيات والفرص اللحظية:** 
+                       جدول منظّم للأسهم التي بها فرص إيجابية بالترتيب:
+                       - **اسم الشركة باللغة العربية**
+                       - الرمز (Ticker)
+                       - السعر الحالي
+                       - سعر الشراء المقترح (نقطة الدخول)
+                       - سعر البيع المستهدف (الهدف الأول)
+                       - نسبة الصعود المتوقعة (%)
+                       - سعر إيقاف الخسارة (Stop Loss)
+
+                    2. **نظرة عامة على السيولة والاتجاه:** ملخص حركات السيولة الموجهة للقطاعات الإسلامية في البورصة المصرية اليوم.
+                    3. **أسهم تحت المراقبة / تحذيرات:** الأسهم التي تعاني من ضغط بيعي أو ضعف سيولة.
+                    4. **توصية تنفيذية سريعة للمستثمر.**
+
+                    ملاحظة صارمة: لا تذكر أي سهم تقليدي أو غير معتمد شرعياً في التقرير إطلاقاً.
+                    """
+                    
+                    response = model.generate_content(prompt)
+                    st.subheader("💡 التقرير التحليلي الموثوق للأسهم الإسلامية")
+                    st.markdown(response.text)
+                    
+                except Exception as e:
+                    if "429" in str(e):
+                        st.error("⏳ تم تجاوز حد الطلبات السريعة (Quota Exceeded). انتظر دقيقة واحدة واضغط على الزر مجدداً.")
+                    else:
+                        st.error(f"حدث خطأ أثناء طلب التحليل: {e}")
+                
