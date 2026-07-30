@@ -1,39 +1,38 @@
 import streamlit as st
 import yfinance as yf
-import google.generativeai as genai
 import pandas as pd
 from concurrent.futures import ThreadPoolExecutor
+from google import genai
 
 # ---------------------------------------------------------
-# 1. إعدادات الصفحة
+# 1. إعدادات الصفحة والتصميم
 # ---------------------------------------------------------
 st.set_page_config(
-    page_title="محلل الأسهم الإسلامية الشامل | EGX Shariah",
+    page_title="منصة الأسهم الإسلامية | EGX Shariah",
     page_icon="🕌",
     layout="wide"
 )
 
 st.title("🕌 منصة تحليل الأسهم الإسلامية (EGX Shariah)")
-st.caption("تتبع شامل لجميع الأسهم المصرية المعتمدة شرعياً - تحديث يدوي حسب الطلب")
+st.caption("متابعة لحظية ومحلل ذكي لأهم الأسهم المعتمدة شرعياً بالبورصة المصرية")
 
 # ---------------------------------------------------------
-# 2. جلب مفتاح API
+# 2. مفتاح API
 # ---------------------------------------------------------
 api_key = st.secrets.get("GEMINI_API_KEY")
 if not api_key:
-    api_key = st.sidebar.text_input("🔑 أدخل مفتاح Gemini API:", type="password")
+    api_key = st.sidebar.text_input("🔑 أدخل مفتاح Gemini API الخاص بك:", type="password")
 
 # ---------------------------------------------------------
-# 3. قائمة الأسهم الإسلامية
+# 3. قائمة الأسهم الإسلامية المعتمدة
 # ---------------------------------------------------------
 ISLAMIC_STOCKS_MAP = {
     "ADIB.CA": "مصرف أبوظبي الإسلامي",
     "SAUD.CA": "بنك البركة مصر",
-    "FAIT.CA": "بنك فيصل الإسلامي (جنيه)",
-    "CIEB.CA": "كريدي أجريكول مصر",
-    "AMOC.CA": "الإسكندرية للزيوت (أموك)",
+    "FAIT.CA": "بنك فيصل الإسلامي",
+    "AMOC.CA": "أموك للزيوت",
     "ABUK.CA": "أبوقير للأسمدة",
-    "MFPC.CA": "مصر لإنتاج الأسمدة (موبكو)",
+    "MFPC.CA": "موبكو للأسمدة",
     "SKPC.CA": "سيدي كرير للبتروكيماويات",
     "TMGH.CA": "مجموعة طلعت مصطفى",
     "HELI.CA": "مصر الجديدة للإسكان",
@@ -49,92 +48,100 @@ ISLAMIC_STOCKS_MAP = {
 }
 
 # ---------------------------------------------------------
-# 4. محرك الأسعار
+# 4. جلب أسعار الأسهم
 # ---------------------------------------------------------
-def fetch_single_stock(ticker, name):
+def get_stock_data(ticker, name):
     try:
-        stock = yf.Ticker(ticker)
-        hist = stock.history(period="5d")
-        if not hist.empty and len(hist) >= 1:
-            last_price = hist['Close'].iloc[-1]
-            prev_price = hist['Close'].iloc[-2] if len(hist) > 1 else last_price
-            change_percent = ((last_price - prev_price) / prev_price) * 100 if prev_price > 0 else 0.0
-            volume = hist['Volume'].iloc[-1]
+        data = yf.Ticker(ticker).history(period="5d")
+        if not data.empty and len(data) >= 1:
+            last_price = data['Close'].iloc[-1]
+            prev_price = data['Close'].iloc[-2] if len(data) > 1 else last_price
+            change_pct = ((last_price - prev_price) / prev_price) * 100 if prev_price > 0 else 0
+            vol = data['Volume'].iloc[-1]
             return {
                 "الشركة": name,
                 "الرمز": ticker.replace(".CA", ""),
-                "السعر الحالي (ج.م)": round(last_price, 2),
-                "التغير %": round(change_percent, 2),
-                "حجم التداول": int(volume)
+                "السعر (ج.م)": round(last_price, 2),
+                "التغير %": round(change_pct, 2),
+                "حجم التداول": int(vol)
             }
     except Exception:
         pass
     return None
 
-def fetch_all_islamic_prices(stocks_dict):
-    data_list = []
+def fetch_all_data():
+    results = []
     with ThreadPoolExecutor(max_workers=10) as executor:
-        futures = [executor.submit(fetch_single_stock, ticker, name) for ticker, name in stocks_dict.items()]
-        for future in futures:
-            res = future.result()
+        futures = [executor.submit(get_stock_data, t, n) for t, n in ISLAMIC_STOCKS_MAP.items()]
+        for f in futures:
+            res = f.result()
             if res:
-                data_list.append(res)
-    df = pd.DataFrame(data_list)
+                results.append(res)
+    df = pd.DataFrame(results)
     if not df.empty:
         df = df.sort_values(by="حجم التداول", ascending=False)
     return df
 
 # ---------------------------------------------------------
-# 5. عرض البيانات
+# 5. زر التحديث وجدول الأسعار
 # ---------------------------------------------------------
-if st.button("🔄 تحديث أسعار الأسهم الآن"):
-    st.session_state['prices_df'] = fetch_all_islamic_prices(ISLAMIC_STOCKS_MAP)
+if st.button("🔄 تحديث الأسعار الآن"):
+    st.session_state['df_data'] = fetch_all_data()
 
-if 'prices_df' not in st.session_state:
-    st.session_state['prices_df'] = fetch_all_islamic_prices(ISLAMIC_STOCKS_MAP)
+if 'df_data' not in st.session_state:
+    st.session_state['df_data'] = fetch_all_data()
 
-df_prices = st.session_state['prices_df']
+df = st.session_state['df_data']
 
-if df_prices.empty:
-    st.error("⚠️ تعذر جلب البيانات. اضغط على زر التحديث أعلاه.")
+if df.empty:
+    st.error("⚠️ فشل جلب البيانات، اضغط تحديث للتحقق مرة أخرى.")
 else:
-    st.dataframe(df_prices, use_container_width=True, hide_index=True)
-    
-    st.markdown("---")
-    
-    # ---------------------------------------------------------
-    # 6. زر التحليل الذكي
-    # ---------------------------------------------------------
-    if st.button("✨ استخراج التقرير والتحليل الذكي للأسهم"):
-        if not api_key:
-            st.warning("⚠️ برجاء إدخال مفتاح Gemini API.")
-        else:
-            with st.spinner("🧠 جاري التحليل..."):
-                try:
-                    genai.configure(api_key=api_key)
-                    # موديل ثابت ومباشر ورسمي بدون مسارات معقدة
-                    model = genai.GenerativeModel("gemini-1.5-flash")
-                    
-                    # نرسل أعلى 10 أسهم فقط لمنع أي بطء أو تجاوز كوتا
-                    top_data = df_prices.head(10).to_string(index=False)
-                    
-                    prompt = f"""
-                    أنت خبير مالي للأسهم الإسلامية بالبورصة المصرية.
-                    إليك بيانات أنشط الأسهم اليوم:
-                    {top_data}
-                    
-                    قدم تقرير سريع ومختصر يحتوي على:
-                    1. أفضل الفرص الشرائية (الشركة، سعر الدخول، المستهدف، وقف الخسارة).
-                    2. ملخص حالة السوق.
-                    """
-                    
-                    response = model.generate_content(prompt)
-                    st.session_state['latest_report'] = response.text
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"حدث خطأ أثناء تحليل البيانات: {e}")
+    st.dataframe(df, use_container_width=True, hide_index=True)
 
-    if 'latest_report' in st.session_state:
-        st.success("تم إعداد التقرير بنجاح!")
-        st.markdown(st.session_state['latest_report'])
-        
+st.markdown("---")
+
+# ---------------------------------------------------------
+# 6. قسم التقرير والذكاء الاصطناعي
+# ---------------------------------------------------------
+if st.button("✨ استخراج التقرير والتحليل الذكي"):
+    if not api_key:
+        st.warning("⚠️ يرجى أدخال مفتاح GEMINI_API_KEY أولاً.")
+    elif df.empty:
+        st.error("لا توجد بيانات أسهم لتحليلها.")
+    else:
+        with st.spinner("🧠 جاري إعداد التقرير بواسطة الذكاء الاصطناعي..."):
+            try:
+                # تشغيل عميل الذكاء الاصطناعي الجديد
+                client = genai.Client(api_key=api_key)
+                
+                # إعداد البيانات المقترحة للتحليل
+                table_text = df.to_string(index=False)
+                
+                prompt = f"""
+                أنت محلل مالي خبير ومستشار استثماري للأسهم المتوافقة مع الشريعة في البورصة المصرية.
+                إليك البيانات الحالية للأسهم:
+
+                {table_text}
+
+                المطلوب:
+                1. جدول بأفضل الفرص الشرائية (الشركة، الرمز، السعر الحالي، المستهدف، وقف الخسارة).
+                2. رؤية سريعة وحالة السوق وحركة السيولة.
+                """
+
+                # طلب التحليل بموديل flash المباشر
+                response = client.models.generate_content(
+                    model='gemini-2.5-flash',
+                    contents=prompt
+                )
+
+                st.session_state['report_text'] = response.text
+                st.rerun()
+
+            except Exception as err:
+                st.error(f"حدث خطأ أثناء طلب التقرير: {err}")
+
+# عرض التقرير الناتج
+if 'report_text' in st.session_state:
+    st.success("تم التقرير بنجاح! 🎯")
+    st.markdown(st.session_state['report_text'])
+    
