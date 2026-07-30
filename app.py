@@ -60,7 +60,7 @@ st.markdown("""
 
     .opp-card {
         background-color: #ffffff;
-        border-right: 5px solid #2563eb;
+        border-right: 5px solid #dc2626;
         border-radius: 10px;
         padding: 16px;
         margin-bottom: 15px;
@@ -233,7 +233,7 @@ def fetch_stocks_data():
                 high = hist['High'].max()
                 low = hist['Low'].min()
             else:
-                current, change, pct_change, high, low = 15.0, 0.5, 1.2, 15.5, 14.5
+                current, change, pct_change, high, low = 15.0, -0.5, -1.2, 15.5, 14.5
             
             results.append({
                 "name": name,
@@ -248,15 +248,20 @@ def fetch_stocks_data():
             continue
     return pd.DataFrame(results)
 
-# --- تحليل الفرص بالذكاء الاصطناعي مع إجبار كتابة أسباب تحليل فنية حقيقية ومفصلة ---
-def generate_ai_opportunities(df_stocks, timeframe_filter):
+# --- تصفية واختيار الأسهم المنخفضة التي لديها فرص صعود بالذكاء الاصطناعي ---
+def generate_ai_dip_opportunities(df_stocks, timeframe_filter):
     model = get_gemini_model()
     
+    # فرز الأسهم الأثر هبوطاً أو التي سجلت انخفاضاً لتركيز الذكاء الاصطناعي عليها
+    df_negative = df_stocks[df_stocks['pct_change'] < 0].sort_values(by="pct_change", ascending=True)
+    if len(df_negative) < 4:
+        df_negative = df_stocks.sort_values(by="pct_change", ascending=True) # لو الأسهم كلها إيجابية نأخذ الأقل صعوداً
+        
     seed_val = abs(hash(timeframe_filter)) % 1000
-    df_shuffled = df_stocks.sample(frac=1, random_state=seed_val).reset_index(drop=True)
+    df_shuffled = df_negative.sample(frac=1, random_state=seed_val).reset_index(drop=True)
     
     stocks_summary = []
-    for _, row in df_shuffled.head(35).iterrows():
+    for _, row in df_shuffled.head(30).iterrows():
         stocks_summary.append(f"- {row['name']} ({row['symbol']}): السعر الحالي {row['price']:.2f} EGP، التغير {row['pct_change']:.2f}%، أعلى {row['high']:.2f}، أقل {row['low']:.2f}")
     
     if timeframe_filter == "جميع المدى الزمني":
@@ -268,22 +273,23 @@ def generate_ai_opportunities(df_stocks, timeframe_filter):
     أنت محلل فني محترف في البورصة المصرية (EGX).
     {time_instruction}
     
-    اختر من 4 إلى 5 أسهم مختلفة من القائمة التالية. 
-    تعليمات صارمة جداً بخصوص "أسباب التحليل": ممنوع تماماً استخدام الجمل المبهمة أو المكررة مثل (تحليل فني متوافق مع المدى). يجب أن تكتب في خانة "أسباب التحليل" سبباً فنياً حقيقياً ووافياً لكل سهم يعتمد على سعره الحالي، مثل: (ارتفاع أحجام التداول واختراق مستوى مقاومة قرب السعر الحالي مع وجود زخم إيجابي يدعم استمرار الصعود نحو الهدف المذكور).
+    تعليمات صارمة جداً:
+    1. ركز حصرياً على اختيار أسهم من القائمة أدناه تكون قد تعرضت لانخفاض أو تصحيح سعري مؤخراً، ولكن لديها **فرصة قوية جداً للارتداد والصعود القريب** من مناطق الدعم الحالية.
+    2. في خانة "أسباب التحليل"، اشرح بوضوح سبب الانخفاض المؤقت ولماذا يعتبر السهم فرصة شراء قوية عند هذه الأسعار المنخفضة (مثلاً: الوصول لمستوى دعم تاريخي، تشبع بيعي، أو قرب ارتداد فني).
     
-    القائمة:
+    قائمة الأسهم المتاحة (ذات التغيرات السلبية أو الهادئة):
     {chr(10).join(stocks_summary)}
     
-    أرجع النتيجة حتمياً بصيغة JSON فقط كقائمة بالشكل التالي دون أي مقدمات أو علامات markdown زائدة:
+    أرجع النتيجة حتمياً بصيغة JSON فقط كقائمة تضم من 4 إلى 5 أسهم بالشكل التالي دون أي مقدمات أو علامات markdown زائدة:
     [
       {{
         "اسم السهم": "اسم السهم من القائمة بالضبط",
-        "التوصية": "شراء قوي",
+        "التوصية": "شراء من الدعم",
         "المدى الزمني": "حدد المدى الزمني المناسب للسهم",
         "سعر الشراء": "35.50",
         "السعر المستهدف": "42.00",
         "وقف الخسارة": "33.00",
-        "أسباب التحليل": "اكتب هنا سبباً فنياً تفصيلياً وحقيقياً مدعماً بحركة السعر والزخم"
+        "أسباب التحليل": "اشرح سبب الانخفاض المؤقت ولماذا تعتبر فرصة ارتداد صاعد قوية"
       }}
     ]
     """
@@ -297,48 +303,41 @@ def generate_ai_opportunities(df_stocks, timeframe_filter):
         return json.loads(text)
     except Exception:
         timings = ["مضاربة يومية", "صعود أسبوعي", "صعود شهري", "مضاربة يومية"]
-        reasons = [
-            "ارتفاع ملحوظ في السيولة اللحظية واقتراب السعر من اختبار مقاومة قوية تدعم الصعود السريع.",
-            "استقرار السعر فوق مناطق الدعم الرئيسية مع تشكل نموذج إيجابي على المدى القصير.",
-            "تجميع إيجابي واضح وتواجد فرص لنمو سعري تدريجي يستهدف مستويات أعلى خلال الفترة القادمة.",
-            "زخم شرائي مكثف يظهر بوضوح في الجلسات الأخيرة مع تحركات إيجابية لأعلى."
-        ]
         fallback_list = []
         for idx, (_, row) in enumerate(df_stocks.sample(4, random_state=seed_val).iterrows()):
             assigned_time = timings[idx % len(timings)] if timeframe_filter == "جميع المدى الزمني" else timeframe_filter
-            assigned_reason = reasons[idx % len(reasons)]
             fallback_list.append({
                 "اسم السهم": row['name'],
-                "التوصية": "شراء",
+                "التوصية": "شراء من الدعم",
                 "المدى الزمني": assigned_time,
                 "سعر الشراء": f"{row['price']:.2f}",
                 "السعر المستهدف": f"{(row['price'] * 1.08):.2f}",
-                "وقف الخسارة": f"{(row['price'] * 0.96):.2f}",
-                "أسباب التحليل": assigned_reason
+                "وقف الخسارة": f"{(row['price'] * 0.95):.2f}",
+                "أسباب التحليل": "السهم تعرض لجني أرباح وتصحيح طفيف قرب مناطق دعم رئيسية ترجح ارتداده صعوداً."
             })
         return fallback_list
 
 # --- واجهة التطبيق ---
-st.markdown('<h1 class="main-header">📈 أسهم الشريعة الإسلامية - البورصة المصرية</h1>', unsafe_allow_html=True)
+st.markdown('<h1 class="main-header">📉 فرص الارتداد: الأسهم المنخفضة المؤهلة للصعود</h1>', unsafe_allow_html=True)
 
 col_info, col_btn = st.columns([3, 1])
 with col_info:
-    st.write("أكثر 5 أسهم ارتفاعاً في قائمتك، وتحليل ذكي للفرص حسب المدى الزمني.")
+    st.write("استخراج الأسهم التي سجلت انخفاضاً أو تصحيحاً سعرياً ولديها فرصة ارتداد قوية.")
 with col_btn:
     if st.button("🔄 تحديث البيانات", use_container_width=True):
         st.cache_data.clear()
         st.rerun()
 
-with st.spinner("جاري جلب الأسعار اللحظية لقائمتك..."):
+with st.spinner("جاري فحص السوق ورصد الأسهم المنخفضة ذات الفرص..."):
     df_stocks = fetch_stocks_data()
 
-# 1. عرض أكثر 5 أسهم ارتفاعاً من قائمتك
-st.subheader("🔥 أكثر 5 أسهم ارتفاعاً في قائمتك")
+# 1. عرض أكثر 5 أسهم انخفاضاً للتوضيح
+st.subheader("🔻 أكثر الأسهم انخفاضاً في الجلسات الأخيرة")
 
 if not df_stocks.empty:
-    top_gainers = df_stocks.sort_values(by="pct_change", ascending=False).head(5)
+    top_losers = df_stocks.sort_values(by="pct_change", ascending=True).head(5)
     
-    for _, item in top_gainers.iterrows():
+    for _, item in top_losers.iterrows():
         change_class = "price-up" if item['pct_change'] >= 0 else "price-down"
         sign = "+" if item['pct_change'] >= 0 else ""
         
@@ -359,10 +358,10 @@ else:
 
 st.markdown("---")
 
-# 2. قسم الفرص من قائمتك مع الفلتر والتحديث الفوري
+# 2. قسم الفرص للمنخفضة مع الفلتر والتحديث الفوري
 col_opp_title, col_filter = st.columns([2, 2])
 with col_opp_title:
-    st.subheader("🌟 أفضل الفرص الاستثمارية الموصى بها")
+    st.subheader("🎯 صيد الفرص: أسهم منخفضة مرشحة للارتداد الصاعد")
 
 with col_filter:
     timeframe_filter = st.selectbox(
@@ -372,14 +371,14 @@ with col_filter:
     )
 
 if not df_stocks.empty:
-    with st.spinner("جاري تحليل أسهم قائمتك وتصنيف الفرص..."):
-        opp_data = generate_ai_opportunities(df_stocks, timeframe_filter)
+    with st.spinner("جاري تحليل الفرص الاستثمارية للأسهم المنخفضة..."):
+        opp_data = generate_ai_dip_opportunities(df_stocks, timeframe_filter)
         
         for item in opp_data:
-            rec = item.get("التوصية", "شراء")
+            rec = item.get("التوصية", "شراء من الدعم")
             time_frame = item.get("المدى الزمني", "صعود أسبوعي")
-            badge_class = "badge-buy-strong" if "قوي" in rec else ("badge-buy" if "شراء" in rec else "badge-hold")
-            border_color = "#16a34a" if "قوي" in rec else ("#2563eb" if "شراء" in rec else "#d97706")
+            badge_class = "badge-buy-strong" if "قوي" in rec else "badge-buy"
+            border_color = "#dc2626"
             
             st.markdown(f"""
             <div class="opp-card" style="border-right-color: {border_color};">
@@ -409,3 +408,4 @@ if not df_stocks.empty:
                 </div>
             </div>
             """, unsafe_allow_html=True)
+            
