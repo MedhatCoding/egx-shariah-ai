@@ -113,9 +113,23 @@ else:
             
             genai.configure(api_key=api_key)
             
-            # تجربة الموديلات المتاحة أوتوماتيكياً لضمان عدم حدوث خطأ 404
-            model_name = 'gemini-1.5-flash-latest'
-            model = genai.GenerativeModel(model_name)
+            # محاولة اختيار أفضل موديل متاح في الحساب تلقائياً
+            selected_model = None
+            candidate_models = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash']
+            
+            # البحث الذكي في الموديلات المتاحة للمفتاح
+            try:
+                available_models = [m.name.replace('models/', '') for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
+                for candidate in candidate_models:
+                    if candidate in available_models:
+                        selected_model = candidate
+                        break
+                if not selected_model and available_models:
+                    selected_model = available_models[0]
+            except Exception:
+                selected_model = 'gemini-2.5-flash'
+                
+            model = genai.GenerativeModel(selected_model)
             
             prompt = f"""
             أنت خبير ومحلل مالي متخصص حصرياً في "الأسهم المتوافقة مع الشريعة الإسلامية بالبورصة المصرية".
@@ -145,15 +159,7 @@ else:
             try:
                 response = model.generate_content(prompt)
                 st.markdown("---")
-                st.subheader("💡 التقرير التحليلي الموثوق للأسهم الإسلامية")
+                st.subheader(f"💡 التقرير التحليلي (الموديل: {selected_model})")
                 st.markdown(response.text)
             except Exception as e:
-                # محاولة احتياطية بموديل gemini-pro في حال التعثر
-                try:
-                    fallback_model = genai.GenerativeModel('gemini-pro')
-                    response = fallback_model.generate_content(prompt)
-                    st.markdown("---")
-                    st.subheader("💡 التقرير التحليلي الموثوق للأسهم الإسلامية")
-                    st.markdown(response.text)
-                except Exception as ex:
-                    st.error(f"حدث خطأ أثناء طلب التحليل من Gemini: {ex}")
+                st.error(f"حدث خطأ أثناء طلب التحليل: {e}")
