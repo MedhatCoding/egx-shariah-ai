@@ -148,7 +148,6 @@ with col_btn1:
         with st.spinner("⏳ جاري سحب أحدث الأسعار..."):
             st.session_state['prices_df'] = fetch_all_islamic_prices(ISLAMIC_STOCKS_MAP)
 
-# تحميل الأسعار لأول مرة إذا لم تكن موجودة
 if 'prices_df' not in st.session_state:
     st.session_state['prices_df'] = fetch_all_islamic_prices(ISLAMIC_STOCKS_MAP)
 
@@ -183,7 +182,7 @@ else:
     st.markdown("---")
     
     # ---------------------------------------------------------
-    # 7. زر التحليل الذكي (يدوي)
+    # 7. زر التحليل الذكي (تم تعديل اسم الموديل إلى gemini-1.5-flash)
     # ---------------------------------------------------------
     if st.button("✨ استخراج التقرير والتحليل الذكي للأسهم"):
         if not api_key:
@@ -192,7 +191,8 @@ else:
             with st.spinner("🧠 جاري تحليل البيانات وصياغة التوصيات..."):
                 try:
                     genai.configure(api_key=api_key)
-                    model = genai.GenerativeModel('gemini-2.5-flash')
+                    # تعديل اسم الموديل ليكون شغال ومستقر 100%
+                    model = genai.GenerativeModel('gemini-1.5-flash')
                     
                     prompt = f"""
                     أنت خبير ومحلل مالي متخصص حصرياً في الأسهم المتوافقة مع الشريعة الإسلامية بالبورصة المصرية (EGX Shariah).
@@ -221,16 +221,14 @@ else:
                     
                     response = model.generate_content(prompt)
                     st.session_state['latest_report'] = response.text
+                    st.rerun()
                     
                 except Exception as e:
-                    if "429" in str(e):
-                        st.error("⏳ تم تجاوز حد الطلبات (Quota Exceeded). انتظر دقيقة واحدة واضغط مجدداً.")
-                    else:
-                        st.error(f"حدث خطأ أثناء تحليل البيانات: {e}")
+                    st.error(f"حدث خطأ أثناء تحليل البيانات: {e}")
 
     # عرض التقرير
     if 'latest_report' in st.session_state:
         st.success("تم إعداد التقرير بنجاح!")
         st.subheader("💡 التقرير التحليلي الشامل")
         st.markdown(st.session_state['latest_report'])
-                      
+                  
