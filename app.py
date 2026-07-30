@@ -88,13 +88,13 @@ st.markdown("""
         font-weight: bold;
     }
 
-    .badge-hold {
-        background-color: #fef3c7;
-        color: #b45309;
-        padding: 4px 10px;
-        border-radius: 20px;
-        font-size: 0.85rem;
-        font-weight: bold;
+    .badge-time {
+        background-color: #f1f5f9;
+        color: #475569;
+        padding: 3px 8px;
+        border-radius: 15px;
+        font-size: 0.75rem;
+        font-weight: 600;
     }
 
     .stButton > button {
@@ -174,28 +174,41 @@ def fetch_stocks_data():
             continue
     return pd.DataFrame(results)
 
-# --- تحليل الفرص بالذكاء الاصطناعي لعدة فرص ---
-def generate_ai_opportunities(df_stocks):
+# --- تحليل الفرص بالذكاء الاصطناعي مع التصنيف الزمني ---
+def generate_ai_opportunities(df_stocks, timeframe_filter):
     model = get_gemini_model()
     stocks_summary = []
     for _, row in df_stocks.iterrows():
         stocks_summary.append(f"- {row['name']} ({row['symbol']}): السعر {row['price']:.2f} EGP، التغير {row['pct_change']:.2f}%")
     
+    time_instruction = ""
+    if timeframe_filter == "مضاربية في نفس الجلسة (يومي)":
+        time_instruction = "ركز فقط على الفرص المناسبة للمضاربة السريعة داخل نفس الجلسة بناءً على الزخم اللحظي وتغيرات السعر."
+    elif timeframe_filter == "صعود أسبوعي":
+        time_instruction = "ركز على الفرص التي تتطلب مدى زمني أسبوعي (اختراق مستويات مقاومة أو تجميع يدعم الصعود خلال الأيام القادمة)."
+    elif timeframe_filter == "صعود شهري (استثماري قصير)":
+        time_instruction = "ركز على الفرص الاستثمارية ذات المدى الشهري المبنية على اتجاهات صاعدة مستقرة."
+    else:
+        time_instruction = "قم بتنويع الفرص لتشمل مضاربة جلسة، أسبوعية، وشهرية."
+
     prompt = f"""
-    أنت مستشار مالي ومحلل فني محترف في البورصة المصرية (EGX).
+    أنت محلل فني محترف ومدير محافظ في البورصة المصرية (EGX).
     بناءً على الأسهم التالية:
     {chr(10).join(stocks_summary)}
     
-    اختر كل الفرص الاستثمارية الجيدة والممكنة (على الأقل 4 إلى 5 فرص مختلفة) بناءً على حركة الأسعار والزخم.
+    {time_instruction}
+    
+    حدد جميع الفرص الممكنة (على الأقل 4 فرص). لكل فرصة، حدد المدى الزمني بدقة (مثل: "مضاربة جلسة"، "أسبوعي"، أو "شهري").
     أرجع النتيجة حتمياً بصيغة JSON فقط كقائمة تضم عدة كائنات بالشكل التالي دون أي مقدمات أو علامات markdown زائدة:
     [
       {{
         "اسم السهم": "اسم السهم",
         "التوصية": "شراء قوي",
+        "المدى الزمني": "مضاربة جلسة" أو "أسبوعي" أو "شهري",
         "سعر الشراء": "35.50",
         "السعر المستهدف": "42.00",
         "وقف الخسارة": "33.00",
-        "أسباب التحليل": "شرح فني مختصر وسبب الاختيار"
+        "أسباب التحليل": "شرح فني محترف يوضح سبب الاختيار والمدى الزمني المتوقع"
       }}
     ]
     """
@@ -208,16 +221,16 @@ def generate_ai_opportunities(df_stocks):
             text = text.split("```")[1].split("```")[0].strip()
         return json.loads(text)
     except Exception:
-        # احتياطي في حال حدوث خطأ بالشبكة يرجّع أكثر من فرصة
         fallback_list = []
         for _, row in df_stocks.head(4).iterrows():
             fallback_list.append({
                 "اسم السهم": row['name'],
                 "التوصية": "شراء",
+                "المدى الزمني": "أسبوعي",
                 "سعر الشراء": f"{row['price']:.2f}",
                 "السعر المستهدف": f"{(row['price'] * 1.10):.2f}",
                 "وقف الخسارة": f"{(row['price'] * 0.95):.2f}",
-                "أسباب التحليل": "زخم إيجابي ملحوظ واستقرار سعري يدعم الصعود."
+                "أسباب التحليل": "زخم إيجابي ملحوظ يدعم الصعود خلال الفترة القادمة."
             })
         return fallback_list
 
@@ -226,7 +239,7 @@ st.markdown('<h1 class="main-header">📈 أسهم الشريعة الإسلام
 
 col_info, col_btn = st.columns([3, 1])
 with col_info:
-    st.write("أكثر 5 أسهم ارتفاعاً في القائمة، وتحليل ذكي لكافة الفرص الاستثمارية الحالية.")
+    st.write("أكثر 5 أسهم ارتفاعاً في القائمة، وتحليل ذكي للفرص الاستثمارية حسب المدى الزمني.")
 with col_btn:
     if st.button("🔄 تحديث البيانات", use_container_width=True):
         st.cache_data.clear()
@@ -262,15 +275,25 @@ else:
 
 st.markdown("---")
 
-# 2. عرض كافة الفرص الاستثمارية المتاحة تحت بعضها
-st.subheader("🌟 أفضل الفرص الاستثمارية الموصى بها")
+# 2. قسم الفرص مع فلتر المدى الزمني
+col_opp_title, col_filter = st.columns([2, 2])
+with col_opp_title:
+    st.subheader("🌟 أفضل الفرص الاستثمارية الموصى بها")
+
+with col_filter:
+    timeframe_filter = st.selectbox(
+        "فلتر حسب المدى الزمني للفرصة:",
+        ["جميع المدى الزمني", "مضاربية في نفس الجلسة (يومي)", "صعود أسبوعي", "صعود شهري (استثماري قصير)"],
+        label_visibility="collapsed"
+    )
 
 if not df_stocks.empty:
-    with st.spinner("جاري تحليل كافة الفرص المتاحة..."):
-        opp_data = generate_ai_opportunities(df_stocks)
+    with st.spinner("جاري تحليل الفرص وتصنيفها..."):
+        opp_data = generate_ai_opportunities(df_stocks, timeframe_filter)
         
         for item in opp_data:
             rec = item.get("التوصية", "شراء")
+            time_frame = item.get("المدى الزمني", "أسبوعي")
             badge_class = "badge-buy-strong" if "قوي" in rec else ("badge-buy" if "شراء" in rec else "badge-hold")
             border_color = "#16a34a" if "قوي" in rec else ("#2563eb" if "شراء" in rec else "#d97706")
             
@@ -278,7 +301,10 @@ if not df_stocks.empty:
             <div class="opp-card" style="border-right-color: {border_color};">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
                     <span style="font-size: 1.15rem; font-weight: bold; color: #0f172a;">🎯 {item.get('اسم السهم')}</span>
-                    <span class="{badge_class}">{rec}</span>
+                    <div style="display: flex; gap: 8px; align-items: center;">
+                        <span class="badge-time">⏱️ {time_frame}</span>
+                        <span class="{badge_class}">{rec}</span>
+                    </div>
                 </div>
                 <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; background-color: #f8fafc; padding: 10px; border-radius: 8px; text-align: center; margin-bottom: 10px;">
                     <div>
@@ -299,3 +325,4 @@ if not df_stocks.empty:
                 </div>
             </div>
             """, unsafe_allow_html=True)
+    
