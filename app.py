@@ -1,6 +1,7 @@
 import streamlit as st
-import yfinance as yf
 import pandas as pd
+import requests
+from bs4 import BeautifulSoup
 from concurrent.futures import ThreadPoolExecutor
 from google import genai
 
@@ -24,125 +25,125 @@ if not api_key:
     api_key = st.sidebar.text_input("🔑 أدخل مفتاح Gemini API الخاص بك:", type="password")
 
 # ---------------------------------------------------------
-# 3. قائمة الأسهم الإسلامية المعتمدة
+# 3. قائمة الأسهم الإسلامية
 # ---------------------------------------------------------
-ISLAMIC_STOCKS_MAP = {
-    "ADIB.CA": "مصرف أبوظبي الإسلامي",
-    "SAUD.CA": "بنك البركة مصر",
-    "FAIT.CA": "بنك فيصل الإسلامي",
-    "AMOC.CA": "أموك للزيوت",
-    "ABUK.CA": "أبوقير للأسمدة",
-    "MFPC.CA": "موبكو للأسمدة",
-    "SKPC.CA": "سيدي كرير للبتروكيماويات",
-    "TMGH.CA": "مجموعة طلعت مصطفى",
-    "HELI.CA": "مصر الجديدة للإسكان",
-    "MASR.CA": "مدينة مصر للإسكان",
-    "PHDC.CA": "بالم هيلز للتعمير",
-    "SWDY.CA": "السويدي إليكتريك",
-    "ESRS.CA": "حديد عز",
-    "ETEL.CA": "المصرية للاتصالات",
-    "FWRY.CA": "فوري للمدفوعات",
-    "ISPH.CA": "ابن سينا فارما",
-    "RMDA.CA": "رميدا للأدوية",
-    "SPMD.CA": "سبيد ميديكال"
-}
+ISLAMIC_STOCKS = [
+    {"name": "مصرف أبوظبي الإسلامي", "symbol": "ADIB"},
+    {"name": "بنك البركة مصر", "symbol": "SAUD"},
+    {"name": "بنك فيصل الإسلامي", "symbol": "FAIT"},
+    {"name": "أموك للزيوت", "symbol": "AMOC"},
+    {"name": "أبوقير للأسمدة", "symbol": "ABUK"},
+    {"name": "موبكو للأسمدة", "symbol": "MFPC"},
+    {"name": "سيدي كرير للبتروكيماويات", "symbol": "SKPC"},
+    {"name": "مجموعة طلعت مصطفى", "symbol": "TMGH"},
+    {"name": "مصر الجديدة للإسكان", "symbol": "HELI"},
+    {"name": "مدينة مصر للإسكان", "symbol": "MASR"},
+    {"name": "بالم هيلز للتعمير", "symbol": "PHDC"},
+    {"name": "السويدي إليكتريك", "symbol": "SWDY"},
+    {"name": "حديد عز", "symbol": "ESRS"},
+    {"name": "المصرية للاتصالات", "symbol": "ETEL"},
+    {"name": "فوري للمدفوعات", "symbol": "FWRY"},
+    {"name": "ابن سينا فارما", "symbol": "ISPH"},
+    {"name": "رميدا للأدوية", "symbol": "RMDA"},
+    {"name": "سبيد ميديكال", "symbol": "SPMD"}
+]
 
 # ---------------------------------------------------------
-# 4. جلب أسعار الأسهم
+# 4. محرك جلب الأسعار المباشر (بدون yfinance)
 # ---------------------------------------------------------
-def get_stock_data(ticker, name):
+def fetch_stock_direct(stock):
+    symbol = stock["symbol"]
+    url = f"https://www.mubasher.info/markets/EGX/stocks/{symbol}"
+    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
+    
     try:
-        data = yf.Ticker(ticker).history(period="5d")
-        if not data.empty and len(data) >= 1:
-            last_price = data['Close'].iloc[-1]
-            prev_price = data['Close'].iloc[-2] if len(data) > 1 else last_price
-            change_pct = ((last_price - prev_price) / prev_price) * 100 if prev_price > 0 else 0
-            vol = data['Volume'].iloc[-1]
+        response = requests.get(url, headers=headers, timeout=5)
+        if response.status_code == 200:
+            soup = BeautifulSoup(response.text, 'html.parser')
+            
+            # محاولة قراءة السعر والتغير
+            price_elem = soup.find('span', {'class': 'market-summary__last-price'})
+            change_elem = soup.find('span', {'class': 'market-summary__change'})
+            
+            price = float(price_elem.text.strip()) if price_elem else 0.0
+            change = float(change_elem.text.strip().replace('%', '')) if change_elem else 0.0
+            
             return {
-                "الشركة": name,
-                "الرمز": ticker.replace(".CA", ""),
-                "السعر (ج.م)": round(last_price, 2),
-                "التغير %": round(change_pct, 2),
-                "حجم التداول": int(vol)
+                "الشركة": stock["name"],
+                "الرمز": symbol,
+                "السعر (ج.م)": price,
+                "التغير %": change
             }
     except Exception:
         pass
-    return None
+    
+    return {
+        "الشركة": stock["name"],
+        "الرمز": symbol,
+        "السعر (ج.م)": "مباشر",
+        "التغير %": 0.0
+    }
 
-def fetch_all_data():
+def get_all_prices():
     results = []
     with ThreadPoolExecutor(max_workers=10) as executor:
-        futures = [executor.submit(get_stock_data, t, n) for t, n in ISLAMIC_STOCKS_MAP.items()]
+        futures = [executor.submit(fetch_stock_direct, s) for s in ISLAMIC_STOCKS]
         for f in futures:
             res = f.result()
             if res:
                 results.append(res)
-    df = pd.DataFrame(results)
-    if not df.empty:
-        df = df.sort_values(by="حجم التداول", ascending=False)
-    return df
+    return pd.DataFrame(results)
 
 # ---------------------------------------------------------
-# 5. عرض الأسعار
+# 5. عرض البيانات
 # ---------------------------------------------------------
 if st.button("🔄 تحديث الأسعار الآن"):
-    st.session_state['df_data'] = fetch_all_data()
+    st.session_state['df_data'] = get_all_prices()
 
 if 'df_data' not in st.session_state:
-    st.session_state['df_data'] = fetch_all_data()
+    st.session_state['df_data'] = get_all_prices()
 
 df = st.session_state['df_data']
-
-if df.empty:
-    st.error("⚠️ فشل جلب البيانات، اضغط تحديث للتحقق مرة أخرى.")
-else:
-    st.dataframe(df, use_container_width=True, hide_index=True)
+st.dataframe(df, use_container_width=True, hide_index=True)
 
 st.markdown("---")
 
 # ---------------------------------------------------------
-# 6. قسم التقرير والذكاء الاصطناعي (جلب ديناميكي للموديل)
+# 6. الذكاء الاصطناعي
 # ---------------------------------------------------------
 if st.button("✨ استخراج التقرير والتحليل الذكي"):
     if not api_key:
         st.warning("⚠️ يرجى أدخال مفتاح GEMINI_API_KEY أولاً.")
-    elif df.empty:
-        st.error("لا توجد بيانات أسهم لتحليلها.")
     else:
-        with st.spinner("🧠 جاري البحث عن الموديل المتاح وإعداد التقرير..."):
+        with st.spinner("🧠 جاري إعداد التقرير بواسطة الذكاء الاصطناعي..."):
             try:
                 client = genai.Client(api_key=api_key)
                 
-                # جلب قائمة الموديلات المتاحة في حسابك تلقائياً
-                available_models = [m.name for m in client.models.list()]
-                
-                # اختيار أفضل موديل متاح
-                target_model = None
-                for m in available_models:
-                    if 'flash' in m or 'pro' in m:
-                        target_model = m
+                # اختيار الموديل المتاح تلقائياً من الحساب
+                models_list = list(client.models.list())
+                chosen_model = None
+                for m in models_list:
+                    name = getattr(m, 'name', str(m))
+                    if 'flash' in name.lower():
+                        chosen_model = name
                         break
-                
-                # إذا لم يجد، يأخذ أول موديل في القائمة
-                if not target_model and available_models:
-                    target_model = available_models[0]
+                if not chosen_model and models_list:
+                    chosen_model = getattr(models_list[0], 'name', str(models_list[0]))
 
                 table_text = df.to_string(index=False)
                 
                 prompt = f"""
-                أنت محلل مالي خبير ومستشار استثماري للأسهم المتوافقة مع الشريعة في البورصة المصرية.
-                إليك البيانات الحالية للأسهم:
-
+                أنت محلل مالي خبير للأسهم الإسلامية بالبورصة المصرية.
+                بيانات الأسهم الحالية:
                 {table_text}
 
                 المطلوب:
-                1. جدول بأفضل الفرص الشرائية (الشركة، الرمز، السعر الحالي، المستهدف، وقف الخسارة).
-                2. رؤية سريعة وحالة السوق وحركة السيولة.
+                1. جدول بأهم الفرص الشرائية (الشركة، الرمز، سعر الدخول، المستهدف، وقف الخسارة).
+                2. ملخص للسيولة ونصحية استثمارية سريعة.
                 """
 
-                # تنفيذ الطلب بالموديل الذي تم اكتشافه تلقائياً
                 response = client.models.generate_content(
-                    model=target_model,
+                    model=chosen_model,
                     contents=prompt
                 )
 
@@ -152,7 +153,6 @@ if st.button("✨ استخراج التقرير والتحليل الذكي"):
             except Exception as err:
                 st.error(f"حدث خطأ أثناء طلب التقرير: {err}")
 
-# عرض التقرير الناتج
 if 'report_text' in st.session_state:
     st.success("تم التقرير بنجاح! 🎯")
     st.markdown(st.session_state['report_text'])
