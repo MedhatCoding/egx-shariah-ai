@@ -5,21 +5,49 @@ import pandas as pd
 from streamlit_autorefresh import st_autorefresh
 
 # ---------------------------------------------------------
-# 1. إعدادات الصفحة
+# 1. إعدادات الصفحة والتنسيق البصري الاحترافي (CSS Customization)
 # ---------------------------------------------------------
 st.set_page_config(
-    page_title="محلل الأسهم الإسلامية المعتمدة - البورصة المصرية",
+    page_title="محلل الأسهم الإسلامية | EGX Shariah",
     page_icon="🕌",
     layout="centered"
 )
+
+# إضافة لمسات تصميم احترافية
+st.markdown("""
+    <style>
+    .main {
+        padding-top: 1rem;
+    }
+    .stButton>button {
+        width: 100%;
+        border-radius: 10px;
+        height: 3em;
+        font-weight: bold;
+        font-size: 16px;
+        background-color: #0d6efd;
+        color: white;
+        border: none;
+        transition: all 0.3s ease;
+    }
+    .stButton>button:hover {
+        background-color: #0b5ed7;
+        box-shadow: 0 4px 12px rgba(13, 110, 253, 0.3);
+    }
+    div[data-testid="stMetricValue"] {
+        font-size: 20px;
+    }
+    </style>
+""", unsafe_allow_html=True)
 
 # ---------------------------------------------------------
 # 2. التحديث الأوتوماتيكي للأسعار فقط (كل 60 ثانية)
 # ---------------------------------------------------------
 count = st_autorefresh(interval=60 * 1000, key="datarefreshcounter")
 
-st.title("🕌 محلل الأسهم الإسلامية المعتمدة")
-st.caption(f"🔄 أسعار البورصة تتحدث تلقائياً (تحديث رقم: {count}) | قائمة محققة ومطابقة للمعايير الشرعية")
+# الهيدر الرئيسي بتصميم أنيق
+st.title("🕌 منصة تحليل الأسهم الإسلامية")
+st.caption("تتبع تحليلي للأسهم المصرية المعتمدة شرعياً وفق معايير الأزهر الشريف و AAOIFI")
 
 # ---------------------------------------------------------
 # 3. جلب مفتاح Gemini API أوتوماتيكياً من Secrets
@@ -27,51 +55,26 @@ st.caption(f"🔄 أسعار البورصة تتحدث تلقائياً (تحد�
 api_key = st.secrets.get("GEMINI_API_KEY")
 
 if not api_key:
-    api_key = st.sidebar.text_input("أدخل مفتاح Gemini API:", type="password")
+    api_key = st.sidebar.text_input("🔑 أدخل مفتاح Gemini API:", type="password")
 
 # ---------------------------------------------------------
-# 4. القائمة الشاملة للأسهم المتوافقة مع الشريعة (الأزهر + AAOIFI)
+# 4. القائمة الشاملة للأسهم المتوافقة مع الشريعة
 # ---------------------------------------------------------
 VERIFIED_ISLAMIC_STOCKS = [
     # قطاع البنوك والخدمات المالية الإسلامية
-    "ADIB.CA", # مصرف أبوظبي الإسلامي
-    "SAUD.CA", # بنك البركة مصر
-    
+    "ADIB.CA", "SAUD.CA",
     # قطاع البتروكيماويات والأسمدة والغاز
-    "AMOC.CA", # الإسكندرية للزيوت المعدنية (أموك)
-    "ABUK.CA", # أبوقير للأسمدة
-    "MFPC.CA", # مصر لإنتاج الأسمدة (موبكو)
-    "SKPC.CA", # سيدي كرير للبتروكيماويات
-    "KABO.CA", # النصر للملابس والمنسوجات
-    
+    "AMOC.CA", "ABUK.CA", "MFPC.CA", "SKPC.CA", "KABO.CA",
     # قطاع العقارات والتطوير العمراني
-    "TMGH.CA", # مجموعة طلعت مصطفى
-    "HELI.CA", # مصر الجديدة للإسكان والتعمير
-    "ORAS.CA", # أوراسكوم للإنشاءات
-    "PHDC.CA", # بالم هيلز للتعمير
-    "OCDI.CA", # 6 أكتوبر للتنمية والاستثمار (سوديك)
-    "AMER.CA", # عامر جروب
-    
+    "TMGH.CA", "HELI.CA", "ORAS.CA", "PHDC.CA", "OCDI.CA", "AMER.CA",
     # قطاع الصناعة والتصنيع والأغذية
-    "SWDY.CA", # السويدي إليكتريك
-    "ESRS.CA", # حديد عز
-    "JUFO.CA", # جهينة للصناعات الغذائية
-    "DOMH.CA", # دومتي
-    "ORWE.CA", # النساجون الشرقيون
-    "ALCN.CA", # الإسكندرية لتداول البضائع
-    "EGAL.CA", # مصر للألومنيوم
-    "MCQE.CA", # مصر بني سويف للأسمنت
-    
+    "SWDY.CA", "ESRS.CA", "JUFO.CA", "DOMH.CA", "ORWE.CA", "ALCN.CA", "EGAL.CA", "MCQE.CA",
     # قطاع الاتصالات، التكنولوجيا والأدوية
-    "ETEL.CA", # المصرية للاتصالات
-    "ISPH.CA", # ابن سينا فارما
-    "RMDA.CA", # العاشرة من رمضان (رميدا)
-    "FWRY.CA", # فوري تكنولوجيا البنوك
-    "RAYA.CA"  # راية القابضة
+    "ETEL.CA", "ISPH.CA", "RMDA.CA", "FWRY.CA", "RAYA.CA"
 ]
 
 # ---------------------------------------------------------
-# 5. دالة جلب الأسعار اللحظية أوتوماتيكياً
+# 5. دالة جلب الأسعار اللحظية
 # ---------------------------------------------------------
 @st.cache_data(ttl=30)
 def fetch_live_prices(tickers):
@@ -88,7 +91,7 @@ def fetch_live_prices(tickers):
                 
                 data_list.append({
                     "الرمز": ticker.replace(".CA", ""),
-                    "السعر الحالي": round(last_price, 2),
+                    "السعر الحالي (ج.م)": round(last_price, 2),
                     "التغير %": round(change_percent, 2),
                     "حجم التداول": volume
                 })
@@ -97,26 +100,40 @@ def fetch_live_prices(tickers):
     return pd.DataFrame(data_list)
 
 # ---------------------------------------------------------
-# 6. جلب الأسعار وعرضها
+# 6. عرض البيانات والبطاقات
 # ---------------------------------------------------------
 df_prices = fetch_live_prices(VERIFIED_ISLAMIC_STOCKS)
 
 if df_prices.empty:
-    st.error("تعذر جلب البيانات اللحظية، تأكد من اتصال الإنترنت أو وقت جلسة التداول.")
+    st.error("⚠️ تعذر جلب البيانات اللحظية، تأكد من اتصال الإنترنت أو وقت جلسة التداول.")
 else:
-    st.subheader("📊 الأسعار اللحظية للأسهم الإسلامية المعتمدة")
-    st.dataframe(df_prices, use_container_width=True)
+    # عرض إحصائيات سريعة في الأعلى
+    col1, col2 = st.columns(2)
+    with col1:
+        st.metric(label="عدد الأسهم المتابعة", value=f"{len(df_prices)} سهم")
+    with col2:
+        st.metric(label="حالة التحديث", value=f"تحديث #{count}", delta="نشط (60ث)")
+
+    st.markdown("---")
+    st.subheader("📊 جدول الأسعار اللحظية")
+    
+    # عرض جدول الأسعار بتنسيق متجاوب
+    st.dataframe(
+        df_prices, 
+        use_container_width=True,
+        hide_index=True
+    )
     
     st.markdown("---")
     
     # ---------------------------------------------------------
-    # 7. زر توليد التقرير التحليلي عند الطلب (لتوفير الكوتا)
+    # 7. زر التحليل الذكي
     # ---------------------------------------------------------
-    if st.button("💡 توليد التقرير والتحليل الذكي للأسهم الآن", type="primary"):
+    if st.button("✨ استخراج التقرير والتحليل الذكي للأسهم"):
         if not api_key:
             st.warning("⚠️ لم يتم العثور على مفتاح API. برجاء إضافته في Secrets أو إدخاله في الشريط الجانبي.")
         else:
-            with st.spinner("⏳ جاري تحليل الأسهم وإعداد التوصيات..."):
+            with st.spinner("🧠 جاري تحليل الاتجاهات وصياغة التوصيات..."):
                 try:
                     genai.configure(api_key=api_key)
                     model = genai.GenerativeModel('gemini-2.5-flash')
@@ -147,7 +164,10 @@ else:
                     """
                     
                     response = model.generate_content(prompt)
-                    st.subheader("💡 التقرير التحليلي الموثوق للأسهم الإسلامية")
+                    
+                    # عرض التقرير داخل بطاقة منسقة
+                    st.success("تم إعداد التقرير بنجاح!")
+                    st.subheader("💡 التقرير التحليلي الموثوق")
                     st.markdown(response.text)
                     
                 except Exception as e:
@@ -155,4 +175,3 @@ else:
                         st.error("⏳ تم تجاوز حد الطلبات السريعة (Quota Exceeded). انتظر دقيقة واحدة واضغط على الزر مجدداً.")
                     else:
                         st.error(f"حدث خطأ أثناء طلب التحليل: {e}")
-                 
