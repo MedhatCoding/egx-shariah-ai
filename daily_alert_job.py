@@ -336,12 +336,63 @@ def append_new_candidates_to_log(ws, candidates):
             print("⚠️ تعذر إضافة الصفوف الجديدة:", e)
 
 
+def check_hits_and_stops(ws, current_prices: dict):
+    """
+    يقرأ السجل الحالي كامل، ويفحص كل توصية لسه ماتنبّهناش عليها (تم التنبيه؟ = False):
+    لو السعر الحالي وصل الهدف أو ضرب وقف الخسارة، يبعت رسالة تليجرام ويعلّم الصف كـ "تم التنبيه؟ = True".
+    """
+    if ws is None:
+        return
+    try:
+        records = ws.get_all_records()
+    except Exception as e:
+        print("⚠️ تعذرت قراءة السجل لفحص الأهداف/الوقف:", e)
+        return
+    if not records:
+        return
+
+    rows_to_update = []  # (row_index_في_الشيت, message)
+    for i, r in enumerate(records):
+        already_notified = str(r.get("تم التنبيه؟", "")).strip().lower() in ("true", "1", "yes", "نعم")
+        if already_notified:
+            continue
+        name = r.get("السهم")
+        current = current_prices.get(name)
+        if current is None:
+            continue
+        try:
+            target = float(r.get("الهدف"))
+            stop = float(r.get("وقف الخسارة"))
+        except (ValueError, TypeError):
+            continue
+
+        if current >= target:
+            msg = f"✅ <b>{name}</b>: تحقق الهدف عند {target} EGP (السعر الحالي {current:.2f})"
+            rows_to_update.append((i + 2, msg))  # +2: صف العناوين + فهرسة تبدأ من 1
+        elif current <= stop:
+            msg = f"❌ <b>{name}</b>: ضرب وقف الخسارة عند {stop} EGP (السعر الحالي {current:.2f})"
+            rows_to_update.append((i + 2, msg))
+
+    if not rows_to_update:
+        return
+
+    notified_col_index = LOG_COLUMNS.index("تم التنبيه؟") + 1  # gspread أعمدته تبدأ من 1
+    for row_num, msg in rows_to_update:
+        if send_telegram_message(msg):
+            try:
+                ws.update_cell(row_num, notified_col_index, True)
+            except Exception as e:
+                print("⚠️ تعذر تحديث عمود التنبيه:", e)
+    print(f"🔔 تم إرسال {len(rows_to_update)} تنبيه هدف/وقف خسارة.")
+
+
 # ============================================================
 # 5) التشغيل الرئيسي
 # ============================================================
 def main():
     print(f"[{datetime.now()}] بدء المسح اليومي لـ {len(SHARIAH_STOCKS)} سهم...")
     candidates = []
+    current_prices = {}
     failed = []
 
     for name, symbol in SHARIAH_STOCKS.items():
@@ -351,6 +402,7 @@ def main():
                 failed.append(name)
                 continue
             ind = compute_indicators(hist)
+            current_prices[name] = ind["last_close"]  # نخزن سعر كل الأسهم (مش الفرص بس) عشان فحص الهدف/الوقف
             score, tags = score_opportunity(ind)
             if score >= SCORE_THRESHOLD:
                 candidates.append({
@@ -368,7 +420,10 @@ def main():
     ws = get_worksheet()
     append_new_candidates_to_log(ws, candidates)
 
-    # ابعت ملخص تليجرام
+    # افحص التوصيات القديمة في السجل: هل وصلت هدفها أو ضربت وقفها؟ (وابعت تنبيه فوري لو كده)
+    check_hits_and_stops(ws, current_prices)
+
+    # ابعت ملخص تليجرام يومي بالفرص الجديدة
     today_str = datetime.now().strftime("%Y-%m-%d")
     if not candidates:
         msg = f"📅 {today_str}\nمفيش فرص وصلت لعتبة {SCORE_THRESHOLD} نقطة النهاردة."
@@ -392,3 +447,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+    
