@@ -1,0 +1,31 @@
+name: مسح يومي لأسهم الشريعة وإرسال تليجرام
+
+on:
+  schedule:
+    - cron: "0 12 * * 0-4"
+  workflow_dispatch: {}
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          pip install yfinance pandas numpy gspread google-auth requests
+
+      - name: Run daily scan
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          GSHEET_URL: ${{ secrets.GSHEET_URL }}
+          GCP_SERVICE_ACCOUNT_JSON: ${{ secrets.GCP_SERVICE_ACCOUNT_JSON }}
+          SCORE_THRESHOLD: "5"
+        run: python daily_alert_job.py
